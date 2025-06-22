@@ -65,10 +65,10 @@ class MpcController(Node):
         Q = np.eye(2) * 10 * dt
 
         # cost matrix for control, linear velocity
-        R = np.eye(n_drones * n_u) * 8 * dt
+        R = np.eye(n_drones * self.n_u) * 8 * dt
 
         # linear velocities of the drones
-        num_controls_per_step = n_drones * n_u
+        num_controls_per_step = n_drones * self.n_u
         self.num_controls_per_step = num_controls_per_step
         u = cp.Variable(num_controls_per_step * n, name="u")
         num_states_per_step = n_state

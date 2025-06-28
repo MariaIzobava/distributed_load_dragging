@@ -4,6 +4,7 @@ project(crazyflie_ros2_multiranger_bringup)
 
 find_package(ament_cmake REQUIRED)
 find_package(ros_gz_crazyflie_bringup REQUIRED)
+find_package(GTSAM REQUIRED)
 
 # Install project launch and config files
 install(DIRECTORY

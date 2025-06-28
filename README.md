@@ -10,9 +10,9 @@ colcon build --cmake-args -DBUILD_TESTING=ON
 
 ## Environment vars
 
-source ~/crazyflie_mapping_demo/ros2_ws/install/setup.bash
+source install/setup.bash
 
-export GZ_SIM_RESOURCE_PATH="/home/$USER/crazyflie_gazebo/ros2_ws/src/ros_gz_crazyflie/ros_gz_crazyflie_gazebo/models/"
+export GZ_SIM_RESOURCE_PATH="/home/$USER/distributed_load_dragging/ros2_ws/src/ros_gz_crazyflie/ros_gz_crazyflie_gazebo/models/"
 
 
 ## Run with manual control

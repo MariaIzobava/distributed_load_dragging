@@ -57,6 +57,16 @@ def generate_launch_description():
         ]
     )
 
+    mpcg_controller = Node(
+        package='crazyflie_ros2_controller_cpp',
+        executable='mpc',
+        output='screen',
+        parameters=[
+            {'desired_height': 0.7},
+            {'robot_prefix': 'crazyflie'},
+        ]
+    )
+
     # start a simple mapper node
     # simple_mapper = Node(
     #     package='crazyflie_ros2_multiranger_simple_mapper',
@@ -90,6 +100,7 @@ def generate_launch_description():
         simple_traj_publisher,
         load_path_publisher,
         mpc_controller,
+        mpcg_controller,
         #simple_mapper,
         rviz
         ])

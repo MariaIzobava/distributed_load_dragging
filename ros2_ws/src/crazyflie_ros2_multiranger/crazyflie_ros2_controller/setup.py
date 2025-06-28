@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'mpc = crazyflie_ros2_controller.mpc:main'
+            'mpc = crazyflie_ros2_controller.mpc:main',
+            'mpc_graph = crazyflie_ros2_controller.mpc_with_factor_graph:main'
         ],
     },
 )

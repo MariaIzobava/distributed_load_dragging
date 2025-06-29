@@ -58,7 +58,7 @@ def generate_launch_description():
     )
 
     mpcg_controller = Node(
-        package='crazyflie_ros2_controller_cpp',
+        package='crazyflie_ros2_contoller_cpp',
         executable='mpc',
         output='screen',
         parameters=[
@@ -99,7 +99,7 @@ def generate_launch_description():
         crazyflie_simulation,
         simple_traj_publisher,
         load_path_publisher,
-        mpc_controller,
+        #mpc_controller,
         mpcg_controller,
         #simple_mapper,
         rviz

@@ -9,6 +9,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(GTSAM REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 
 include_directories(
   ${GTSAM_INCLUDE_DIRS}
@@ -21,6 +23,8 @@ ament_target_dependencies(
   mpc
   rclcpp
   GTSAM
+  nav_msgs
+  tf2
 )
 
 target_link_libraries(mpc

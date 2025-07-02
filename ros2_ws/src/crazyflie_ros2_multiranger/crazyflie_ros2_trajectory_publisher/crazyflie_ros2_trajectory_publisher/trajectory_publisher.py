@@ -18,7 +18,7 @@ class TrajectoryPublisher(Node):
 
         # Example: A simple circular path
         radius = 2.0
-        num_points = 500
+        num_points = 2500
         for i in range(num_points):
             angle = 2 * math.pi * i / num_points - math.pi / 2.0
             pose = PoseStamped()

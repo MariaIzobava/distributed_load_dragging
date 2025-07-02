@@ -78,22 +78,22 @@ Copyright (c) 2022 Bitcraze
     <include>
       <uri>model://crazyflie</uri>
       <name>crazyflie_01</name>
-      <pose>0 0 0 0 0 0</pose>
+      <pose>-1.04 0 0 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://load</uri>
       <name>the_load</name>
-      <pose>1.2 0 0 0 0 0</pose>
+      <pose>0.16 0 0 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://segment</uri>
       <name>segment_01</name>
-      <pose>0.25 0 0 0 0 0</pose> 
+      <pose>-0.79 0 0 0 0 0</pose> 
     </include>
 
-    <joint name="drone_to_cable_01" type="revolute">
+    <joint name="drone_to_cable_01" type="ball">
       <pose relative_to='crazyflie_01::hook_link'>0 0 0 0 0 0</pose> 
       <parent>crazyflie_01::hook_link</parent> 
       <child>segment_01::segment_link</child>
@@ -103,17 +103,17 @@ Copyright (c) 2022 Bitcraze
     <include>
       <uri>model://segment</uri>
       <name>segment_10</name>
-      <pose>0.75 0 0 0 0 0</pose>
+      <pose>-0.29 0 0 0 0 0</pose>
     </include>
 
-    <joint name="segment_09_to_10" type="revolute">
+    <joint name="segment_09_to_10" type="ball">
       <pose relative_to='segment_01::segment_end'>0 0 0 0 0 0</pose>
       <parent>segment_01::segment_end</parent>
       <child>segment_10::segment_link</child>
       <axis><xyz>0 1 0</xyz></axis>
     </joint>
 
-    <joint name="cable_10_to_load" type="revolute">
+    <joint name="cable_10_to_load" type="ball">
       <pose relative_to='segment_10::segment_end'>0 0 0 0 0 0</pose>
       <parent>segment_10::segment_end</parent>
       <child>the_load::top_center_hook</child>

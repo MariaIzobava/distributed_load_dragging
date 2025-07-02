@@ -78,19 +78,19 @@ Copyright (c) 2022 Bitcraze
     <include>
       <uri>model://crazyflie</uri>
       <name>crazyflie_01</name>
-      <pose>0 0 0 0 0 0</pose>
+      <pose>-1.2 0 0 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://load</uri>
       <name>the_load</name>
-      <pose>1.2 0 0 0 0 0</pose>
+      <pose>0 0 0 0 0 0</pose>
     </include>
 
     <include>
       <uri>model://segment</uri>
       <name>segment_01</name>
-      <pose>0.25 0 0 0 0 0</pose> 
+      <pose>-0.95 0 0 0 0 0</pose> 
     </include>
 
     <joint name="drone_to_cable_01" type="revolute">
@@ -103,7 +103,7 @@ Copyright (c) 2022 Bitcraze
     <include>
       <uri>model://segment</uri>
       <name>segment_10</name>
-      <pose>0.75 0 0 0 0 0</pose>
+      <pose>-0.45 0 0 0 0 0</pose>
     </include>
 
     <joint name="segment_09_to_10" type="revolute">

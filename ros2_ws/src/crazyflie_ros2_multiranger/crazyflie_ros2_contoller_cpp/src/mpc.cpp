@@ -28,54 +28,33 @@ using namespace gtsam;
 // Define symbols for different variable types for clarity
 using symbol_t = gtsam::Symbol;
 
-class NonNegativeFactor: public NoiseModelFactor1<Vector1> {
-public:
-    NonNegativeFactor(Key key, const SharedNoiseModel& model): 
-        NoiseModelFactor1<Vector1>(model, key) {}
-
-    Vector evaluateError(const Vector1& x, gtsam::OptionalMatrixType H) const override {
-        const double val = x(0);
-
-        if (val >= 0) {
-            if (H) {
-                *H = Matrix11::Zero();
-
-            }
-            return Vector1::Zero();
-        } else {
-            if (H) {
-                *H = -Matrix11::Identity();
-            }
-            return Vector1(-val);
-        }
-    }
-};
-
 /**
  * Custom factor to model the robot's dynamics.
  * Connects Xr_k, U_k, T_k, Xr_{k+1}
  * Error = Xr_{k+1} - (Xr_k + dt * f(Xr_k, U_k, T_k))
  */
-class RobotDynamicsFactor: public NoiseModelFactor4<Vector4, Vector2, Vector1, Vector4> {
+class RobotDynamicsFactor: public NoiseModelFactor5<Vector4, Vector4, Vector2, Vector1, Vector4> {
     double dt_;
     double robot_mass_;
 
 public:
     // Standard constructor
-    RobotDynamicsFactor(Key key_xr_k, Key key_u_k, Key key_tension_k, Key key_xr_k_plus_1,
+    RobotDynamicsFactor(Key key_xr_k, Key key_xl_k, Key key_u_k, Key key_tension_k, Key key_xr_k_plus_1,
                         double dt, double robot_mass, const SharedNoiseModel& model) :
-        NoiseModelFactor4<Vector4, Vector2, Vector1, Vector4>(model, key_xr_k, key_u_k, key_tension_k, key_xr_k_plus_1),
+        NoiseModelFactor5<Vector4, Vector4, Vector2, Vector1, Vector4>(model, key_xr_k, key_xl_k, key_u_k, key_tension_k, key_xr_k_plus_1),
         dt_(dt), robot_mass_(robot_mass) {}
 
     // The evaluateError function, which implements the factor's error calculation.
-    Vector evaluateError(const Vector4& xr_k, 
+    Vector evaluateError(const Vector4& xr_k,
+                         const Vector4& xl_k,
                          const Vector2& u_k, 
                          const Vector1& tension_k,
                          const Vector4& xr_k_plus_1,
                          gtsam::OptionalMatrixType H1,
                          gtsam::OptionalMatrixType H2,
                          gtsam::OptionalMatrixType H3,
-                         gtsam::OptionalMatrixType H4) const override {
+                         gtsam::OptionalMatrixType H4,
+                         gtsam::OptionalMatrixType H5) const override {
         
         // Unpack state: xr = [px, py, vx, vy]
         Vector2 pos_k = xr_k.head<2>();
@@ -85,38 +64,62 @@ public:
         // next_pos = current_pos + dt * current_vel
         // next_vel = current_vel + dt * (control_force/mass - tension_force/mass)
         Vector2 next_pos = pos_k + vel_k * dt_;
-        Vector2 t(2);
-        t << tension_k, 0;
-        Vector2 next_vel = vel_k + (u_k + t) / robot_mass_ * dt_;
+
+        double xd = xr_k(0) - xl_k(0);
+        double yd = xr_k(1) - xl_k(1);
+        Vector2 e(2);
+        e << xd, yd;
+
+        double norm = e.norm();
+        Vector2 e_norm(2);
+        e_norm << e / norm;
+
+        Vector2 next_vel = vel_k + (u_k - tension_k(0) * e_norm) / robot_mass_ * dt_;
 
         Vector4 predicted_xr_k_plus_1(4);
         predicted_xr_k_plus_1 << next_pos, next_vel;
+
+        double ONE = 1.0 / norm - xd * xd / (norm * norm * norm);
+        double TWO = -1.0 / norm + xd * xd / (norm * norm * norm);
+        double THREE = -xd * yd / (norm * norm * norm);
+        double FOUR = xd * yd / (norm * norm * norm);
+        double FIVE = 1.0 / norm - yd * yd / (norm * norm * norm);
+        double SIX = -1.0 / norm + yd * yd / (norm * norm * norm);
 
         if (H1) {
             // H1 is a valid reference to a matrix, so you can assign to it.
             *H1 = (gtsam::Matrix(4, 4) << 
                 -1,  0, -dt_, 0,
                  0, -1,  0,  -dt_,
-                 0,  0, -1,   0,
-                 0,  0,  0,  -1).finished();
+                 dt_ * tension_k(0) * ONE / robot_mass_,  dt_ * tension_k(0) * THREE / robot_mass_, -1,   0,
+                 dt_ * tension_k(0) * THREE / robot_mass_,  dt_ * tension_k(0) * FIVE / robot_mass_,  0,  -1).finished();
 
         }
         if (H2) {
-            *H2 = (gtsam::Matrix(4, 2) << 
-                0,  0, 
+            *H2 = (gtsam::Matrix(4, 4) << 
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                 dt_ * tension_k(0) * TWO / robot_mass_,  dt_ * tension_k(0) * FOUR / robot_mass_, 0,   0,
+                 dt_ * tension_k(0) * FOUR / robot_mass_,  dt_ * tension_k(0) * SIX / robot_mass_,  0,  0).finished();
+
+        }
+
+        if (H3) {
+            *H3 = (gtsam::Matrix(4, 2) << 
+                0, 0, 
                 0, 0,  
                 -(dt_/robot_mass_), 0, 
                 0, -(dt_/robot_mass_)).finished();
         }
-        if (H3) {
-            *H3 = (gtsam::Matrix(4, 1) << 
-                0, 
-                0,  
-                -(dt_/robot_mass_), 
-                0).finished();
-        }
         if (H4) {
-            *H4 = gtsam::Matrix4::Identity();
+            *H4 = (gtsam::Matrix(4, 1) << 
+                0,
+                0,
+                (dt_ * xd / (robot_mass_ * norm)), 
+                (dt_ * yd / (robot_mass_ * norm))).finished();
+        }
+        if (H5) {
+            *H5 = gtsam::Matrix4::Identity();
         }
 
         return (Vector(4) << xr_k_plus_1 - predicted_xr_k_plus_1).finished();
@@ -124,7 +127,7 @@ public:
 };
 
 
-class LoadDynamicsFactor: public NoiseModelFactor3<Vector4, Vector1, Vector4> {
+class LoadDynamicsFactor: public NoiseModelFactor4<Vector4, Vector4, Vector1, Vector4> {
     double dt_;
     double load_mass_;
     double mu_;
@@ -132,76 +135,337 @@ class LoadDynamicsFactor: public NoiseModelFactor3<Vector4, Vector1, Vector4> {
 
 public:
     // Standard constructor
-    LoadDynamicsFactor(Key key_xl_k, Key key_tension_k, Key key_xl_k_plus_1,
+    LoadDynamicsFactor(Key key_xl_k, Key key_xr_k, Key key_tension_k, Key key_xl_k_plus_1,
                         double dt, double load_mass, double mu, double g, const SharedNoiseModel& model) :
-        NoiseModelFactor3<Vector4, Vector1, Vector4>(model, key_xl_k, key_tension_k, key_xl_k_plus_1),
+        NoiseModelFactor4<Vector4, Vector4, Vector1, Vector4>(model, key_xl_k, key_xr_k, key_tension_k, key_xl_k_plus_1),
         dt_(dt), load_mass_(load_mass), mu_(mu), g_(g) {}
 
     // The evaluateError function, which implements the factor's error calculation.
     Vector evaluateError(const Vector4& xl_k, 
+                         const Vector4& xr_k,
                          const Vector1& tension_k,
                          const Vector4& xl_k_plus_1,
                          gtsam::OptionalMatrixType H1,
                          gtsam::OptionalMatrixType H2,
-                         gtsam::OptionalMatrixType H3) const override {
+                         gtsam::OptionalMatrixType H3,
+                         gtsam::OptionalMatrixType H4) const override {
         
         // Unpack state: xr = [px, py, vx, vy]
         Vector2 pos_k = xl_k.head<2>();
         Vector2 vel_k = xl_k.tail<2>();
         double v_norm = vel_k.norm();
         Vector2 normed_vel_k = Vector2::Zero();
-        if (v_norm > 1e-1) {
+        double SEVEN = 0.0;
+        double EIGHT = 0.0;
+        double NINE = 0.0;
+        if (v_norm > 1e-12) {
             normed_vel_k << vel_k / v_norm;
+            SEVEN = 1.0 / v_norm - vel_k(0) * vel_k(0) / (v_norm * v_norm * v_norm);
+            EIGHT = 1.0 / v_norm - vel_k(1) * vel_k(1) / (v_norm * v_norm * v_norm);
+            NINE = -1.0 * vel_k(0) * vel_k(1) / (v_norm * v_norm * v_norm);
         }
 
         // Simple Euler integration for dynamics
         // next_pos = current_pos + dt * current_vel
         // next_vel = current_vel + dt * (control_force/mass - tension_force/mass)
         Vector2 next_pos = pos_k + vel_k * dt_;
-        Vector2 t(2);
-        t << tension_k, 0;
 
-        //Vector2 next_vel = vel_k + (-t - mu_ * load_mass_ * g_ * normed_vel_k) / load_mass_ * dt_;
-        Vector2 next_vel = vel_k + (-t - mu_ * load_mass_ * g_ * vel_k) / load_mass_ * dt_;
+        double xd = xr_k(0) - xl_k(0);
+        double yd = xr_k(1) - xl_k(1);
+        Vector2 e(2);
+        e << xd, yd;
+
+        double norm = e.norm();
+        Vector2 e_norm(2);
+        e_norm << e / e.norm();
+
+        Vector2 next_vel = vel_k + (tension_k(0) * e_norm - mu_ * load_mass_ * g_ * normed_vel_k) / load_mass_ * dt_;
 
         Vector4 predicted_xl_k_plus_1(4);
         predicted_xl_k_plus_1 << next_pos, next_vel;
 
+        double ONE = 1.0 / norm - xd * xd / (norm * norm * norm);
+        double TWO = -1.0 / norm + xd * xd / (norm * norm * norm);
+        double THREE = -yd * xd / (norm * norm * norm);
+        double FOUR = xd * yd / (norm * norm * norm);
+        double FIVE = 1.0 / norm - yd * yd / (norm * norm * norm);
+        double SIX = -1.0 / norm + yd * yd / (norm * norm * norm);
+
         if (H1) {
-            
-            double ax_der_x = 0;
-            double ay_der_y = 0;
-            double ax_der_y = 0;
-            if (v_norm > 1e-1) {  
-                ax_der_x = -mu_ * g_ * (1 / v_norm - vel_k(0) * vel_k(0) / (v_norm * v_norm * v_norm));
-                ay_der_y = -mu_ * g_ * (1 / v_norm - vel_k(1) * vel_k(1) / (v_norm * v_norm * v_norm));
-                ax_der_y = -mu_ * g_ * vel_k(0) * vel_k(1) / (v_norm * v_norm * v_norm);
-            }
-
-            // *H1 = (gtsam::Matrix(4, 4) << 
-            //     -1,  0, -dt_, 0,
-            //      0, -1,  0,  -dt_,
-            //      0,  0, -1 - dt_ * ax_der_x, -dt_ * ax_der_y,
-            //      0,  0,  -dt_ * ax_der_y,  -1 - dt_ * ay_der_y).finished();
-
             *H1 = (gtsam::Matrix(4, 4) << 
                 -1,  0, -dt_, 0,
                  0, -1,  0,  -dt_,
-                 0,  0, -1 - dt_ * (-mu_ * g_), 0,
-                 0,  0,  0,  -1 - dt_ * (-mu_ * g_)).finished();
+                 -dt_ * tension_k(0) * TWO / load_mass_,  -dt_ * tension_k(0) * FOUR / load_mass_, -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
+                 -dt_ * tension_k(0) * FOUR / load_mass_,  -dt_ * tension_k(0) * SIX / load_mass_,  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
         }
         if (H2) {
-            *H2 = (gtsam::Matrix(4, 1) << 
-                0, 
-                0,  
-                (dt_/load_mass_), 
-                0).finished();
+            *H2 = (gtsam::Matrix(4, 4) << 
+                0,  0, 0, 0,
+                 0, 0,  0,  0,
+                 -dt_ * tension_k(0) * ONE / load_mass_,  -dt_ * tension_k(0) * THREE / load_mass_, 0, 0,
+                 -dt_ * tension_k(0) * THREE / load_mass_,  -dt_ * tension_k(0) * FIVE / load_mass_, 0, 0).finished();
         }
         if (H3) {
-            *H3 = gtsam::Matrix4::Identity();
+            *H3 = (gtsam::Matrix(4, 1) << 
+                0,
+                0,
+                -(dt_ * xd / (load_mass_ * norm)),
+                -(dt_ * yd / (load_mass_ * norm))).finished();
+        }
+        if (H4) {
+            *H4 = gtsam::Matrix4::Identity();
         }
 
         return (Vector(4) << xl_k_plus_1 - predicted_xl_k_plus_1).finished();
+    }
+};
+
+
+// Helper function for a smooth approximation of max(0, x)
+// This is used to make the factors differentiable everywhere, which helps gradient-based optimizers.
+double smooth_max_zero(double x, double epsilon = 1e-6) {
+    return 0.5 * (x + std::sqrt(x*x + epsilon*epsilon));
+}
+
+
+class TensionLowerBoundFactor : public NoiseModelFactor1<Vector1> {
+private:
+    double weight_; // Weight for this factor
+
+public:
+    // Constructor: Takes the Key for the tension variable, a noise model, and the weight.
+    TensionLowerBoundFactor(Key tensionKey, double weight, const SharedNoiseModel& model)
+        : NoiseModelFactor1<Vector1>(model, tensionKey), weight_(weight) {}
+
+    // evaluateError: Calculates the residual (error) vector.
+    // T_k: The current estimate of the tension variable.
+    // H: Optional output for the Jacobian matrix.
+    Vector evaluateError(const Vector1& T_k,
+                         gtsam::OptionalMatrixType H) const override {
+        // The error value is `weight_ * smooth_max_zero(-T_k)`.
+        double error_val = weight_ * smooth_max_zero(-T_k(0));
+
+        if (H) {
+            // Calculate the Jacobian (derivative of the error with respect to T_k).
+            // Let f(x) = smooth_max_zero(x). We want d(weight_ * f(-T_k))/dT_k.
+            // Using the chain rule: weight_ * f'(-T_k) * d(-T_k)/dT_k = weight_ * f'(-T_k) * (-1).
+            // The derivative of f(x) is f'(x) = 0.5 * (1 + x / sqrt(x^2 + epsilon^2)).
+            // So, f'(-T_k) = 0.5 * (1 + (-T_k) / sqrt((-T_k)^2 + epsilon^2)).
+            // d(error_val)/dT_k = weight_ * (-0.5) * (1 - T_k / sqrt(T_k^2 + epsilon^2)).
+            double deriv_smooth_max_inner = 0.5 * (1.0 - T_k(0) / std::sqrt(T_k(0)*T_k(0) + 1e-6*1e-6));
+            (*H) = (Vector(1) << -weight_ * deriv_smooth_max_inner).finished();
+        }
+        return (Vector(1) << error_val).finished(); // Return a 1x1 vector for scalar error
+    }
+};
+
+// -------------------------------------------------------------------------
+// 2. Custom Factor: Cable Stretch Penalty (||p_r - p_l|| <= L_cable)
+// Error: w_stretch * max(0, ||p_r - p_l|| - L_cable)
+// This factor penalizes if the cable is stretched beyond its nominal length.
+// -------------------------------------------------------------------------
+class CableStretchPenaltyFactor : public NoiseModelFactor2<Vector4, Vector4> {
+private:
+    double cable_length_; // The nominal length of the cable
+    double weight_;       // Weight for this factor
+
+public:
+    // Constructor: Takes Keys for robot and load positions, cable length, noise model, and weight.
+    CableStretchPenaltyFactor(Key robotPosKey, Key loadPosKey, double cableLength,
+                              double weight, const SharedNoiseModel& model)
+        : NoiseModelFactor2<Vector4, Vector4>(model, robotPosKey, loadPosKey),
+          cable_length_(cableLength), weight_(weight) {}
+
+    // evaluateError: Calculates the residual vector.
+    // p_r: Robot position.
+    // p_l: Load position.
+    // H1, H2: Optional outputs for Jacobians with respect to p_r and p_l.
+    Vector evaluateError(const Vector4& p_r, const Vector4& p_l,
+                         gtsam::OptionalMatrixType H1,
+                         gtsam::OptionalMatrixType H2) const override {
+        Vector2 diff(2);
+        diff << p_r(0) - p_l(0), p_r(1) - p_l(1);
+        double distance = diff.norm(); // Euclidean distance ||p_r - p_l||
+
+        // The error value is `weight_ * smooth_max_zero(distance - cable_length_)`.
+        double error_val = weight_ * smooth_max_zero(distance - cable_length_);
+
+        if (H1 || H2) {
+            // Calculate the derivative of `smooth_max_zero(x)` with respect to `x`.
+            // Here, x = `distance - cable_length_`.
+            double inner_term = distance - cable_length_;
+            double deriv_smooth_max_wrt_inner = 0.5 * (1.0 + inner_term / std::sqrt(inner_term*inner_term + 1e-6*1e-6));
+
+            // The derivative of distance `||p_r - p_l||` with respect to `p_r` is `(p_r - p_l) / ||p_r - p_l||`,
+            // which is the unit vector `e` pointing from load to robot.
+            Vector2 partial_deriv_distance_pr = diff / distance;
+            // The derivative with respect to `p_l` is `-(p_r - p_l) / ||p_r - p_l||`, or `-e`.
+            Vector2 partial_deriv_distance_pl = -diff / distance;
+
+            if (H1) { // Jacobian with respect to p_r
+                // Chain rule: d(error)/dp_r = weight * d(smooth_max_zero)/d(inner) * d(inner)/d(distance) * d(distance)/dp_r
+                // d(inner)/d(distance) is 1.0.
+                (*H1) = (gtsam::Matrix(1, 4) << weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pr(0), weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pr(1), 0, 0).finished();
+            }
+            if (H2) { // Jacobian with respect to p_l
+                (*H2) = (gtsam::Matrix(1, 4) << weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pl(0), weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pl(1), 0, 0).finished();
+            }
+        }
+        return (Vector(1) << error_val).finished();
+    }
+};
+
+// -------------------------------------------------------------------------
+// 3. Custom Factor: Tension-Slack Penalty (T_k * max(0, L_cable - ||p_r - p_l||))
+// Error: w_T_slack * T_k * max(0, L_cable - ||p_r - p_l||)
+// This factor discourages positive tension when the cable is slack.
+// -------------------------------------------------------------------------
+class TensionSlackPenaltyFactor : public NoiseModelFactor3<Vector1, Vector4, Vector4> {
+private:
+    double cable_length_; // The nominal length of the cable
+    double weight_;       // Weight for this factor
+
+public:
+    // Constructor: Takes Keys for tension, robot position, load position, cable length, noise model, and weight.
+    TensionSlackPenaltyFactor(Key tensionKey, Key robotPosKey, Key loadPosKey, double cableLength,
+                               double weight, const SharedNoiseModel& model)
+        : NoiseModelFactor3<Vector1, Vector4, Vector4>(model, tensionKey, robotPosKey, loadPosKey),
+          cable_length_(cableLength), weight_(weight) {}
+
+    // evaluateError: Calculates the residual vector.
+    // T_k: Tension.
+    // p_r: Robot position.
+    // p_l: Load position.
+    // H1, H2, H3: Optional outputs for Jacobians.
+    Vector evaluateError(const Vector1& T_k, const Vector4& p_r, const Vector4& p_l,
+                         gtsam::OptionalMatrixType H1,
+                         gtsam::OptionalMatrixType H2,
+                         gtsam::OptionalMatrixType H3) const override {
+        Vector2 diff(2);
+        diff << p_r(0) - p_l(0), p_r(1) - p_l(1);
+        double distance = diff.norm();
+        // Calculate the slack term: max(0, L_cable - distance).
+        // This term is positive if the cable is slack (distance < L_cable).
+        double slack_term_val = smooth_max_zero(cable_length_ - distance);
+
+        // The error value is `weight_ * T_k * slack_term_val`.
+        // If T_k > 0 AND slack_term_val > 0, this factor incurs a penalty.
+        double error_val = weight_ * T_k(0) * slack_term_val;
+
+        if (H1 || H2 || H3) {
+            // Derivatives for Jacobian calculations:
+            // d(error_val)/dT_k = weight_ * slack_term_val
+            // d(error_val)/dp_r = weight_ * T_k * d(slack_term_val)/dp_r
+            // d(error_val)/dp_l = weight_ * T_k * d(slack_term_val)/dp_l
+
+            // First, calculate derivative of smooth_max_zero(x) where x = (cable_length_ - distance).
+            // d(smooth_max_zero(x))/dx = 0.5 * (1 + x / sqrt(x^2 + epsilon^2))
+            double inner_term = cable_length_ - distance;
+            double deriv_smooth_max_wrt_inner = 0.5 * (1.0 + inner_term / std::sqrt(inner_term*inner_term + 1e-6*1e-6));
+
+            // Chain rule for d(slack_term_val)/d(distance): d(smooth_max_zero(C-D))/dD = d(smooth_max_zero)/d(inner) * d(inner)/dD
+            // Here, d(inner)/dD = d(C-D)/dD = -1.
+            double deriv_slack_wrt_distance = deriv_smooth_max_wrt_inner * (-1.0);
+
+            // Derivatives of distance with respect to positions (unit vectors).
+            Vector2 partial_deriv_distance_pr = diff / distance; // unit vector e
+            Vector2 partial_deriv_distance_pl = -diff / distance; // -e vector
+
+            if (H1) { // Jacobian with respect to T_k
+                (*H1) = (Vector(1) << weight_ * slack_term_val).finished();
+            }
+            if (H2) { // Jacobian with respect to p_r
+                // Chain rule: weight * T_k * d(slack_term_val)/d(distance) * d(distance)/dp_r
+                (*H2) = (gtsam::Matrix(1, 4) << weight_ * T_k(0) * deriv_slack_wrt_distance * partial_deriv_distance_pr(0), weight_ * T_k(0) * deriv_slack_wrt_distance * partial_deriv_distance_pr(1), 0, 0).finished();
+            }
+            if (H3) { // Jacobian with respect to p_l
+                // Chain rule: weight * T_k * d(slack_term_val)/d(distance) * d(distance)/dp_l
+                (*H3) = (gtsam::Matrix(1, 4) << weight_ * T_k(0) * deriv_slack_wrt_distance * partial_deriv_distance_pl(0), weight_ * T_k(0) * deriv_slack_wrt_distance * partial_deriv_distance_pl(1), 0, 0).finished();
+            }
+        }
+        return (Vector(1) << error_val).finished();
+    }
+};
+
+class MagnitudeUpperBoundFactor : public NoiseModelFactor1<Vector2> { // Or Pose2 if u_x, u_y are part of a Pose
+private:
+    double max_magnitude_; // The 0.7 limit
+public:
+    MagnitudeUpperBoundFactor(Key key, double maxMagnitude,
+                      const SharedNoiseModel& model)
+        : NoiseModelFactor1<Vector2>(model, key), max_magnitude_(maxMagnitude) {}
+
+    // The evaluateError method calculates the residual
+    Vector evaluateError(const Vector2& u_val,
+                                OptionalMatrixType H) const override {
+        // Calculate current magnitude
+        double current_magnitude = u_val.norm(); // Vector2::norm() computes Euclidean norm
+
+        // Calculate the residual. Only penalize if it exceeds max_magnitude.
+        // We'll return a 1-dimensional residual vector.
+        Vector residual(1);
+        if (current_magnitude > max_magnitude_) {
+            residual[0] = current_magnitude - max_magnitude_;
+        } else {
+            residual[0] = 0.0;
+        }
+
+        if (H) {
+            // Compute Jacobian if requested
+            // The Jacobian of residual w.r.t u_val. This can be tricky.
+            // If residual[0] = current_magnitude - max_magnitude:
+            //   d(current_magnitude)/du_x = u_x / current_magnitude
+            //   d(current_magnitude)/du_y = u_y / current_magnitude
+            // If residual[0] = 0: Jacobian is all zeros.
+
+            if (current_magnitude > max_magnitude_ && current_magnitude > 1e-9) { // Avoid division by zero
+                (*H) = (gtsam::Matrix(1, 2) << u_val[0] / current_magnitude, u_val[1] / current_magnitude).finished();
+            } else {
+                (*H) = (gtsam::Matrix(1, 2) << 0, 0).finished(); // Zero Jacobian
+            }
+        }
+        return residual;
+    }
+};
+
+class MagnitudeLowerBoundFactor : public NoiseModelFactor1<Vector2> { // Or Pose2 if u_x, u_y are part of a Pose
+private:
+    double min_magnitude_; // The 0.7 limit
+public:
+    MagnitudeLowerBoundFactor(Key key, double minMagnitude,
+                      const SharedNoiseModel& model)
+        : NoiseModelFactor1<Vector2>(model, key), min_magnitude_(minMagnitude) {}
+
+    // The evaluateError method calculates the residual
+    Vector evaluateError(const Vector2& u_val,
+                                OptionalMatrixType H) const override {
+        // Calculate current magnitude
+        double current_magnitude = u_val.norm(); // Vector2::norm() computes Euclidean norm
+
+        // Calculate the residual. Only penalize if it exceeds max_magnitude.
+        // We'll return a 1-dimensional residual vector.
+        Vector residual(1);
+        if (current_magnitude < min_magnitude_) {
+            residual[0] = min_magnitude_ - current_magnitude;
+        } else {
+            residual[0] = 0.0;
+        }
+
+        if (H) {
+            // Compute Jacobian if requested
+            // The Jacobian of residual w.r.t u_val. This can be tricky.
+            // If residual[0] = current_magnitude - max_magnitude:
+            //   d(current_magnitude)/du_x = u_x / current_magnitude
+            //   d(current_magnitude)/du_y = u_y / current_magnitude
+            // If residual[0] = 0: Jacobian is all zeros.
+
+            if (current_magnitude < min_magnitude_ && current_magnitude > 1e-9) { // Avoid division by zero
+                (*H) = (gtsam::Matrix(1, 2) << -u_val[0] / current_magnitude, -u_val[1] / current_magnitude).finished();
+            } else {
+                (*H) = (gtsam::Matrix(1, 2) << 0, 0).finished(); // Zero Jacobian
+            }
+        }
+        return residual;
     }
 };
 
@@ -222,7 +486,7 @@ public:
         load_angles_.resize(3);
 
         is_pulling_ = false;
-        desired_height_ = 1.0;
+        desired_height_ = 0.5;
 
         path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
           "/desired_path",
@@ -263,7 +527,7 @@ private:
 
     bool is_pulling_;
     double desired_height_;
-    rclcpp::Time start_time_;
+    std::chrono::high_resolution_clock::time_point start_time_;
 
     // Callback functions
     void odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -332,7 +596,7 @@ private:
                 // stop going up if height is reached
                 new_cmd_msg.linear.z = 0.0;
                 is_pulling_ = true;
-                start_time_ = this->now();
+                start_time_ = std::chrono::high_resolution_clock::now();
                 RCLCPP_INFO(this->get_logger(), "Takeoff completed");
             }
             twist_publisher_->publish(new_cmd_msg);
@@ -359,26 +623,31 @@ private:
 
         // --- Define problem parameters ---
         const int num_time_steps = 20;
-        const double dt = 0.1;
+        const double dt = 0.005;
         const double robot_mass = 0.025; // kg
         const double load_mass = 0.0001;   // kg
         const double gravity = -9.81;
         const double mu = 0.1;
-        // const double cable_length = 1.0; // meters
-        // const double cable_stiffness = 500.0; // N/m
-        // const double cable_damping = 20.0;
+        const double cable_length = 1.2; // meters
     
 
         // --- Define Noise Models ---
         // These represent the uncertainty of each factor (1/covariance)
-        auto prior_noise = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.01, 0.01, 0.01, 0.01).finished());
+        auto dynamics_cost = noiseModel::Diagonal::Sigmas(
+            (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
+        auto goal_cost = noiseModel::Diagonal::Sigmas(
+            (Vector(4) << 0.000005, 0.000005, 1000.1, 1000.1).finished());
+        auto init_cost = noiseModel::Diagonal::Sigmas(
+            (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
+        auto tension_cost = noiseModel::Isotropic::Sigma(1, 0.001);
+
         auto control_cost = noiseModel::Diagonal::Sigmas(
             (Vector(2) << 0.1, 0.1).finished());
-        auto goal_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.05, 0.05, 0.1, 0.1).finished());
-        auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-6);
+        //auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-6);
 
+        double weight_tension_lower_bound = 1000000.0; // High weight to strongly enforce T >= 0
+        double weight_cable_stretch = 1000000.0;     // Very high weight to strongly prevent cable from over-stretching
+        double weight_tension_slack = 50.0;
 
         // --- Add Factors to the Graph ---
 
@@ -394,52 +663,60 @@ private:
             load_position_[1],
             load_position_[3],
             load_position_[4]);
-        graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot_state, prior_noise));
-        graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, prior_noise));
+        graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot_state, init_cost));
+        graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, init_cost));
 
         for (int k = 0; k < num_time_steps; ++k) {
             graph.add(RobotDynamicsFactor(
                 symbol_t('x', k), 
+                symbol_t('l', k),
                 symbol_t('u', k),
                 symbol_t('t', k),
                 symbol_t('x', k+1),
                 dt,
                 robot_mass,
-                prior_noise
+                dynamics_cost
                 ));
 
             graph.add(LoadDynamicsFactor(
                 symbol_t('l', k),
+                symbol_t('x', k),
                 symbol_t('t', k),
                 symbol_t('l', k+1),
                 dt,
                 load_mass,
                 mu,
                 gravity,
-                prior_noise
+                dynamics_cost
                 ));
 
+            // Factor 1: Enforce T_k >= 0
+            graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
+            
+            // Factor 2: Penalize if ||p_r - p_l|| > cable_length
+            graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
+            
+            // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
+            graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
+
             // Add a soft cost on control input to keep it small (prevents wild solutions)
-            graph.add(PriorFactor<Vector2>(symbol_t('u', k), Vector2::Zero(), control_cost));
-            graph.add(NonNegativeFactor(symbol_t('t', k), tension_cost));
+            //graph.add(PriorFactor<Vector2>(symbol_t('u', k), Vector2::Zero(), control_cost));
+            graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 0.3, tension_cost));
+            graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.1, tension_cost));
         }
 
+        auto next_p = get_next_points(num_time_steps);
+        cout << "Cur load position: " << load_position_[0] <<  ' ' << load_position_[1] << std::endl;
+        cout << "Cur robot position: " << position_[0] <<  ' ' << position_[1] << std::endl;
+        cout << "Next position: " << next_p[0] << ' ' << next_p[1] << std::endl;
+
         // Add a goal cost on the final load state
-        Vector4 final_load_goal(load_position_[0] - 0.2,
-            load_position_[1],
-            load_position_[3],
-            load_position_[4]); 
+        Vector4 final_load_goal(
+            next_p[0],
+            next_p[1],
+            load_position_[3], // doesn't matter
+            load_position_[4]);  // doesn't matter
         graph.add(PriorFactor<Vector4>(symbol_t('l', num_time_steps), final_load_goal, goal_cost));
-        
-        Vector4 final_robot_goal(position_[0] - 0.2,
-            position_[1],
-            position_[3],
-            position_[4]);
-        graph.add(PriorFactor<Vector4>(symbol_t('x', num_time_steps), final_robot_goal, goal_cost));
-
-
-        // cout << "Factor Graph built." << endl;
-        // graph.print("Factor Graph:\n");
 
 
         // --- 3. Create Initial Estimate ---
@@ -458,8 +735,6 @@ private:
             }
         }
 
-        // cout << "\nInitial values created." << endl;
-        // initial_values.print("Initial Values:\n");
 
         // // --- 4. Optimize ---
         LevenbergMarquardtParams params;
@@ -475,7 +750,66 @@ private:
 
         // --- 5. Print Results ---
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
+        Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 1));
+
+        cout << "Next velocity: " << next_state[2] << ' ' << next_state[3] << endl;
+        cout << "Next control: " << next_ctrl[0] << ' ' << next_ctrl[1] << endl;
         return {next_state[2], next_state[3]};
+    }
+
+    std::vector<double> get_next_points(int n) {
+        int num_p = 2500; // num_p is number of points
+        
+        // Get current time
+        auto cur_time = std::chrono::high_resolution_clock::now();
+        
+        // Calculate seconds from the beginning
+        auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
+        //double sec_from_beginning = sec_from_beginning_duration.count();
+
+        // Calculate start_point using modulo. 
+        // Ensure num_p is an integer for the modulo operator.
+        int i = (cur_millisec.count() / 100 + 1) % num_p;
+        cout << "Next point is: " << i << ' ' << cur_millisec.count() << std::endl;
+        std::vector<double> ans;
+        ans.push_back(path_->poses[i].pose.position.x);
+        ans.push_back(path_->poses[i].pose.position.y);
+        return ans; 
+        
+        // std::vector<double> res;
+        // res.reserve(n * 2); // Pre-allocate memory to improve performance
+
+        // // First loop: from start_point to min(start_point + n, num_p)
+        // for (int i = start_point; i < std::min(start_point + n, num_p); ++i) {
+        //     // Check if i is a valid index
+        //     if (i >= 0 && i < path.poses.size()) {
+        //         Point p = path.poses[i].position;
+        //         res.push_back(p.x);
+        //         res.push_back(p.y);
+        //     } else {
+        //         // Handle out-of-bounds index if necessary, though ideally path.poses should have num_p elements
+        //         // For example, you might want to break or log an error.
+        //     }
+        // }
+
+        // // Second loop: if start_point + n wraps around num_p
+        // if (start_point + n > num_p) {
+        //     // The range for the second loop should be from 0 up to the remaining points needed.
+        //     // The number of remaining points is (start_point + n) - num_p.
+        //     // So, loop for i from 0 up to (start_point + n) - num_p.
+        //     int remaining_points_to_add = (start_point + n) - num_p;
+        //     for (int i = 0; i < remaining_points_to_add; ++i) {
+        //          // Check if i is a valid index
+        //         if (i >= 0 && i < path.poses.size()) {
+        //             Point p = path.poses[i].position;
+        //             res.push_back(p.x);
+        //             res.push_back(p.y);
+        //         } else {
+        //             // Handle out-of-bounds index if necessary
+        //         }
+        //     }
+        // }
+        // return res;
     }
 
 

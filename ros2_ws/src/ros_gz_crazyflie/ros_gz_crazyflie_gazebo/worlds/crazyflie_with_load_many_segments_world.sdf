@@ -1,0 +1,228 @@
+<?xml version="1.0" ?>
+<!-- 
+ ...........       ____  _ __
+ |  ,-^-,  |      / __ )(_) /_______________ _____  ___
+ | (  O  ) |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
+ | / ,..´  |    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
+    +.......   /_____/_/\__/\___/_/   \__,_/ /___/\___/
+ 
+MIT License
+
+Copyright (c) 2022 Bitcraze
+-->
+
+<sdf version="1.6">
+  <world name="crazyflie_world">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin
+      filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin
+      filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin
+      filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin
+      filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <include>
+      <uri>model://crazyflie</uri>
+      <name>crazyflie_01</name>
+      <pose>-1.04 0 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://load</uri>
+      <name>the_load</name>
+      <pose>0.16 0 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_01</name>
+      <pose>-0.99 0 0 0 0 0</pose> 
+    </include>
+
+    <joint name="drone_to_cable_01" type="ball">
+      <pose relative_to='crazyflie_01::hook_link'>0 0 0 0 0 0</pose> 
+      <parent>crazyflie_01::hook_link</parent> 
+      <child>segment_01::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_2</name>
+      <pose>-0.89 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_01_to_2" type="ball">
+      <pose relative_to='segment_01::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_01::segment_end</parent>
+      <child>segment_2::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_3</name>
+      <pose>-0.79 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_02_to_3" type="ball">
+      <pose relative_to='segment_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_2::segment_end</parent>
+      <child>segment_3::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_4</name>
+      <pose>-0.69 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_3_to_4" type="ball">
+      <pose relative_to='segment_3::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_3::segment_end</parent>
+      <child>segment_4::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_5</name>
+      <pose>-0.59 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_4_to_5" type="ball">
+      <pose relative_to='segment_4::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_4::segment_end</parent>
+      <child>segment_5::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_6</name>
+      <pose>-0.49 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_5_to_6" type="ball">
+      <pose relative_to='segment_5::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_5::segment_end</parent>
+      <child>segment_6::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_7</name>
+      <pose>-0.39 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_6_to_7" type="ball">
+      <pose relative_to='segment_6::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_6::segment_end</parent>
+      <child>segment_7::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_8</name>
+      <pose>-0.29 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_7_to_8" type="ball">
+      <pose relative_to='segment_7::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_7::segment_end</parent>
+      <child>segment_8::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://small_segment</uri>
+      <name>segment_9</name>
+      <pose>-0.19 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_8_to_9" type="ball">
+      <pose relative_to='segment_8::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_8::segment_end</parent>
+      <child>segment_9::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+     <include>
+      <uri>model://small_segment</uri>
+      <name>segment_10</name>
+      <pose>-0.09 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="segment_9_to_10" type="ball">
+      <pose relative_to='segment_9::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_9::segment_end</parent>
+      <child>segment_10::segment_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+
+    <joint name="cable_10_to_load" type="ball">
+      <pose relative_to='segment_10::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_10::segment_end</parent>
+      <child>the_load::top_center_hook</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+  </world>
+</sdf>

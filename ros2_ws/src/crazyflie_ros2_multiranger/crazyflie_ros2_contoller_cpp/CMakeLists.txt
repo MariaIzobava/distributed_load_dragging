@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(GTSAM REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(factor_graph_lib REQUIRED)
 
 include_directories(
   ${GTSAM_INCLUDE_DIRS}
@@ -25,6 +26,7 @@ ament_target_dependencies(
   GTSAM
   nav_msgs
   tf2
+  factor_graph_lib
 )
 
 target_link_libraries(mpc

@@ -68,9 +68,45 @@ def generate_launch_description():
             }]
             )
 
+    # My nodes
+    simple_traj_publisher = Node(
+        package='crazyflie_ros2_trajectory_publisher',
+        executable='trajectory_publisher',
+        name='trajectory_publisher',
+        output='screen',
+        parameters=[
+            {'robot_prefix': 'crazyflie_real'},
+            {'use_sim_time': True}
+        ]
+    )
+
+    load_path_publisher = Node(
+        package='crazyflie_ros2_trajectory_publisher',
+        executable='load_path_publisher',
+        name='load_path_publisher',
+        output='screen',
+        parameters=[
+            {'robot_prefix': 'crazyflie_real'},
+            {'use_sim_time': True}
+        ]
+    )
+
+    mpcg_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc',
+        output='screen',
+        parameters=[
+            {'desired_height': 0.7},
+            {'robot_prefix': 'crazyflie_real'},
+        ]
+    )
+
     return LaunchDescription([
         crazyflie_real,
         simple_mapper,
         crazyflie_vel_mux,
-        rviz
+        rviz,
+        simple_traj_publisher,
+        load_path_publisher,
+        mpcg_controller,
         ])

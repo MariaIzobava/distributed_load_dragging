@@ -9,6 +9,7 @@
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/Vector.h>
 
+#include "std_msgs/msg/bool.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/quaternion.hpp" // For the Quaternion message type
@@ -68,6 +69,11 @@ public:
           10, // QoS history depth
           std::bind(&GtsamCppTestNode::load_odom_subscribe_callback, this, std::placeholders::_1));
 
+        land_ = this->create_subscription<std_msgs::msg::Bool>(
+          "land",
+          10, // QoS history depth
+          std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
+
         twist_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
         timer_ = this->create_wall_timer(
         std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
@@ -81,6 +87,7 @@ private:
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -93,6 +100,17 @@ private:
     bool is_pulling_;
     double desired_height_;
     std::chrono::high_resolution_clock::time_point start_time_;
+
+    void land_subscribe_callback(const std_msgs::msg::Bool msg)
+    {
+        cout << "Factor Graph MPC: LANDING" << std::endl;
+        timer_->cancel();
+        geometry_msgs::msg::Twist new_cmd_msg;
+        new_cmd_msg.linear.z = -0.2;
+            
+        twist_publisher_->publish(new_cmd_msg);
+        return; 
+    }
 
     // Callback functions
     void odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -147,18 +165,22 @@ private:
 
     void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
     {
+        cout << "GOT THE PATH!" << std::endl;
         path_ = msg; // Store the shared pointer to the received path message
     }
     
     void timer_callback()
     {
+        if (path_ == NULL) {
+            return;
+        }
+
         geometry_msgs::msg::Twist new_cmd_msg; // Create a new Twist message each time
 
         // If not flying --> takeoff
         if (!is_pulling_) {
             new_cmd_msg.linear.z = 0.5;
             if (position_[2] > desired_height_) {
-                // stop going up if height is reached
                 new_cmd_msg.linear.z = 0.0;
                 is_pulling_ = true;
                 start_time_ = std::chrono::high_resolution_clock::now();
@@ -176,8 +198,10 @@ private:
 
         auto next_velocity = get_next_velocity_();
 
-        new_cmd_msg.linear.x = next_velocity[0];
-        new_cmd_msg.linear.y = next_velocity[1];
+        // Limiting velocities for safety
+        new_cmd_msg.linear.x = max(min(next_velocity[0], 0.3), -0.3);
+        new_cmd_msg.linear.y = max(min(next_velocity[1], 0.3), -0.3);
+        cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
         
         twist_publisher_->publish(new_cmd_msg);
     }
@@ -189,7 +213,7 @@ private:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.0001;   // kg
+        const double load_mass = 0.001;   // kg
         const double gravity = -9.81;
         const double mu = 0.1;
         const double cable_length = 1.2; // meters
@@ -210,11 +234,9 @@ private:
             (Vector(2) << 0.1, 0.1).finished());
         auto tension_cost = noiseModel::Isotropic::Sigma(1, 0.001);
 
-
         // --- Add Factors to the Graph ---
 
-        // Add prior factors for the initial state (t=0)
-        // Assume robot starts at origin, load is hanging below it.
+        // Add prior factors for the initial state
         Vector4 initial_robot_state(
             position_[0],
             position_[1],
@@ -261,12 +283,12 @@ private:
             // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
             graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
 
-            // Add a soft cost on control input to keep it constrained (prevents wild solutions)
-            graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 0.3, tension_cost));
-            graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.1, tension_cost));
+            // Add a soft cost on control input to keep it constrained (prevents wild and too slow solutions).
+            graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 6, tension_cost));
+            graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.88, tension_cost));
         }
 
-        auto next_p = get_next_points(num_time_steps);
+        auto next_p = get_next_points();
         cout << "Cur load position: " << load_position_[0] <<  ' ' << load_position_[1] << std::endl;
         cout << "Cur robot position: " << position_[0] <<  ' ' << position_[1] << std::endl;
         cout << "Next position: " << next_p[0] << ' ' << next_p[1] << std::endl;
@@ -313,12 +335,11 @@ private:
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
         Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 1));
 
-        cout << "Next velocity: " << next_state[2] << ' ' << next_state[3] << endl;
         cout << "Next control: " << next_ctrl[0] << ' ' << next_ctrl[1] << endl;
         return {next_state[2], next_state[3]};
     }
 
-    std::vector<double> get_next_points(int n) {
+    std::vector<double> get_next_points() {
         int num_p = 2500; // num_p is number of points
         
         // Get current time
@@ -326,15 +347,13 @@ private:
         
         // Calculate seconds from the beginning
         auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
-        //double sec_from_beginning = sec_from_beginning_duration.count();
 
-        // Calculate start_point using modulo. 
-        // Ensure num_p is an integer for the modulo operator.
         int i = (cur_millisec.count() / 100 + 1) % num_p;
-        cout << "Next point is: " << i << ' ' << cur_millisec.count() << std::endl;
+        cout << i << std::endl;
         std::vector<double> ans;
         ans.push_back(path_->poses[i].pose.position.x);
         ans.push_back(path_->poses[i].pose.position.y);
+        
         return ans; 
     }
 

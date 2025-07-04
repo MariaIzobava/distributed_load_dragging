@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     const int num_time_steps = 20; //20;
     const double dt = 0.005;
     const double robot_mass = 0.025; // kg
-    const double load_mass = 0.01; // 0.0001;   // kg
+    const double load_mass = 0.001; // 0.0001;   // kg
     const double gravity = -9.81;
     const double mu = 0.1;
     const double cable_length = 1.0; // meters
@@ -113,8 +113,8 @@ int main(int argc, char** argv) {
         graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, unitNoise));
 
         // Add a soft cost on control input to keep it constrained (prevents wild solutions)
-        graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 0.3, tension_cost));
-        graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.1, tension_cost));
+        graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 3, tension_cost));
+        graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.3, tension_cost));
     }
 
     // Add a goal cost on the final load state

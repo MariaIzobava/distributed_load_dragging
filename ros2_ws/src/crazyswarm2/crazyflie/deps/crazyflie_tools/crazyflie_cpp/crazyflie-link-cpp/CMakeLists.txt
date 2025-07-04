@@ -49,12 +49,19 @@ if (WIN32)
   set(LIBUSB_INCLUDE_DIR libusb/libusb)
   set(LIBUSB_LIBRARY libusb)
 else()
-  find_package(libusb REQUIRED)
+  #find_package(libusb REQUIRED)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LUBUSB_1_0 REQUIRED libusb-1.0)
 endif()
+
+#find_package(libusb REQUIRED)
+#find_package(PkgConfig REQUIRED)
+#pkg_check_modules(LUBUSB_1_0 REQUIRED libusb-1.0)
 
 include_directories(
   include
   ${LIBUSB_INCLUDE_DIR}
+  ${LIBUSB_1_0_INCLUDE_DIRS}
 )
 
 # C++ library
@@ -90,9 +97,12 @@ target_link_libraries(crazyflieLinkCpp
 )
 endif()
 
+target_include_directories(crazyflieLinkCpp PRIVATE   ${LIBUSB_1_0_INCLUDE_DIRS})
+
 target_link_libraries(crazyflieLinkCpp
-  PRIVATE
-    ${LIBUSB_LIBRARY}
+  PRIVATE usb-1.0
+    #${LIBUSB_1_0_LIBRARIES} 
+    #${LIBUSB_LIBRARY}
 )
 set_property(TARGET crazyflieLinkCpp PROPERTY POSITION_INDEPENDENT_CODE ON)
 

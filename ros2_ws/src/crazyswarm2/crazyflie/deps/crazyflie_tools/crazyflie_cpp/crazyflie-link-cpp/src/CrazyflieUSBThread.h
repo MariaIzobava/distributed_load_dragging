@@ -5,7 +5,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include <libusb.h>
+#include <libusb-1.0/libusb.h>
 
 namespace bitcraze {
 namespace crazyflieLinkCpp {

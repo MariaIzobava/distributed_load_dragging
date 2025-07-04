@@ -8,7 +8,7 @@
 #include "USBManager.h"
 #include "Crazyradio.h"
 
-#include <libusb.h>
+#include <libusb-1.0/libusb.h>
 
 namespace bitcraze {
 namespace crazyflieLinkCpp {

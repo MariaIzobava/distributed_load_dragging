@@ -4,7 +4,7 @@
 #include <vector>
 #include <mutex>
 
-#include <libusb.h>
+#include <libusb-1.0/libusb.h>
 
 #include "CrazyradioThread.h"
 #include "CrazyflieUSBThread.h"

@@ -40,7 +40,7 @@ class GtsamCppTestNode : public rclcpp::Node
 public:
     GtsamCppTestNode() : Node("gtsam_cpp_test_node")
     {
-        RCLCPP_INFO(this->get_logger(), "GTSAM C++ test node has started.");
+        RCLCPP_INFO(this->get_logger(), "MPC with GTSAM node has started.");
 
         this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
 
@@ -165,17 +165,12 @@ private:
 
     void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
     {
-        cout << "GOT THE PATH!" << std::endl;
-        path_ = msg; // Store the shared pointer to the received path message
+        path_ = msg;
     }
     
     void timer_callback()
     {
-        if (path_ == NULL) {
-            return;
-        }
-
-        geometry_msgs::msg::Twist new_cmd_msg; // Create a new Twist message each time
+        geometry_msgs::msg::Twist new_cmd_msg;
 
         // If not flying --> takeoff
         if (!is_pulling_) {
@@ -190,17 +185,22 @@ private:
             return;
         }
 
+        if (path_ == NULL) {
+            return;
+        }
+
         // Now the drone is in "pulling" mode, control with MPC
 
-        // First, we're keeping the drone on the same height for now
+        // First, we're keeping the drone on the same height
         double error = desired_height_ - position_[2];
         new_cmd_msg.linear.z = error;
 
         auto next_velocity = get_next_velocity_();
 
         // Limiting velocities for safety
-        new_cmd_msg.linear.x = max(min(next_velocity[0], 0.3), -0.3);
-        new_cmd_msg.linear.y = max(min(next_velocity[1], 0.3), -0.3);
+        new_cmd_msg.linear.x = max(min(next_velocity[0], 0.2), -0.2);
+        new_cmd_msg.linear.y = max(min(next_velocity[1], 0.2), -0.2);
+        
         cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
         
         twist_publisher_->publish(new_cmd_msg);
@@ -213,12 +213,14 @@ private:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.001;   // kg
+        const double load_mass = 0.0001;   // kg
         const double gravity = -9.81;
         const double mu = 0.1;
-        const double cable_length = 1.2; // meters
+        const double cable_length = 1.0; // meters
+        const double u_upper_bound = 0.3;
+        const double u_lower_bound = 0.003;
         double weight_tension_lower_bound = 1000000.0; // High weight to strongly enforce T >= 0
-        double weight_cable_stretch = 1000000.0;     // Very high weight to strongly prevent cable from over-stretching
+        //double weight_cable_stretch = 1000000.0;     // Very high weight to strongly prevent cable from over-stretching
         double weight_tension_slack = 50.0;
     
 
@@ -227,12 +229,11 @@ private:
         auto dynamics_cost = noiseModel::Diagonal::Sigmas(
             (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
         auto goal_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.000005, 0.000005, 1000.1, 1000.1).finished());
+            (Vector(4) << 0.00005, 0.00005, 1000.1, 1000.1).finished());
         auto init_cost = noiseModel::Diagonal::Sigmas(
             (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
-        auto control_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(2) << 0.1, 0.1).finished());
-        auto tension_cost = noiseModel::Isotropic::Sigma(1, 0.001);
+        auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
+        auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
 
         // --- Add Factors to the Graph ---
 
@@ -278,14 +279,14 @@ private:
             graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
             
             // Factor 2: Penalize if ||p_r - p_l|| > cable_length
-            graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
+            //graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
             
             // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
             graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
 
             // Add a soft cost on control input to keep it constrained (prevents wild and too slow solutions).
-            graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 6, tension_cost));
-            graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.88, tension_cost));
+            graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), u_upper_bound, control_cost));
+            graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), u_lower_bound, control_cost));
         }
 
         auto next_p = get_next_points();
@@ -330,8 +331,6 @@ private:
         cout << "Initial Error: " << graph.error(initial_values) << endl;
         cout << "Final Error: " << graph.error(result) << endl;
 
-
-        // --- 5. Print Results ---
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
         Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 1));
 
@@ -340,7 +339,7 @@ private:
     }
 
     std::vector<double> get_next_points() {
-        int num_p = 2500; // num_p is number of points
+        int num_p = 5000; // num_p is number of points
         
         // Get current time
         auto cur_time = std::chrono::high_resolution_clock::now();
@@ -349,7 +348,7 @@ private:
         auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
 
         int i = (cur_millisec.count() / 100 + 1) % num_p;
-        cout << i << std::endl;
+        cout << i << ' ' << path_->poses.size() << std::endl;
         std::vector<double> ans;
         ans.push_back(path_->poses[i].pose.position.x);
         ans.push_back(path_->poses[i].pose.position.y);

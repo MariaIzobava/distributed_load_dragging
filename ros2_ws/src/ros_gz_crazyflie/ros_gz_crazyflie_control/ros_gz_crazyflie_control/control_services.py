@@ -9,7 +9,7 @@ class ControlServices(Node):
 
     def __init__(self):
         super().__init__('control_services')
-        self.declare_parameter('hover_height', 0.5)
+        self.declare_parameter('hover_height', 0.2)
         self.declare_parameter('robot_prefix', '/crazyflie')
         self.declare_parameter('incoming_twist_topic', '/cmd_vel')
         self.declare_parameter('max_ang_z_rate', 0.4)

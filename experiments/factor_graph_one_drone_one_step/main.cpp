@@ -50,32 +50,28 @@ int main(int argc, char** argv) {
     const double cable_length = 1.0; // meters
     const double cable_stiffness = 500.0; // N/m
     const double cable_damping = 20.0;
-    
 
-    // --- Define Noise Models ---
-    // These represent the uncertainty of each factor (1/covariance)
-    auto prior_noise = noiseModel::Diagonal::Sigmas(
-        (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
-    auto control_cost = noiseModel::Diagonal::Sigmas(
-        (Vector(2) << 0.1, 0.1).finished());
-    auto goal_cost = noiseModel::Diagonal::Sigmas(
-        (Vector(4) << 0.000005, 0.000005, 1000.1, 1000.1).finished());
-    auto init_cost = noiseModel::Diagonal::Sigmas(
-        (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
-    auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-6);
-
-    SharedNoiseModel unitNoise = noiseModel::Isotropic::Sigma(1, 1.0);
-
+    // --- Define weight Models ---
     // Weights for the penalty factors. Adjust these to control the "softness" of the constraints.
     // Higher weights mean stronger enforcement.
     double weight_tension_lower_bound = 1000000.0; // High weight to strongly enforce T >= 0
     double weight_cable_stretch = 1000000.0;     // Very high weight to strongly prevent cable from over-stretching
     double weight_tension_slack = 50.0;       // Moderate weight to discourage tension when the cable should be slack
 
+    // These represent the uncertainty of each factor (1/covariance)
+    auto dynamics_cost = noiseModel::Diagonal::Sigmas(
+        (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
+    auto goal_cost = noiseModel::Diagonal::Sigmas(
+        (Vector(4) << 0.00005, 0.00005, 1000.1, 1000.1).finished());
+    auto init_cost = noiseModel::Diagonal::Sigmas(
+        (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
+    auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
+    auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
+
 
     // --- Add Factors to the Graph ---
-    Vector4 initial_load_state(-0.000510, -1.59716e-07, 0, 0);
-    Vector4 initial_robot_state(-1.04064, -4.62045e-08, 0, 0);
+    Vector4 initial_load_state(0.0, 0.0, 0, 0);
+    Vector4 initial_robot_state(-1, 0, 0, 0);
     graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot_state, init_cost));
     graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, init_cost));
 
@@ -88,7 +84,7 @@ int main(int argc, char** argv) {
             symbol_t('x', k+1),
             dt,
             robot_mass,
-            prior_noise
+            dynamics_cost
             ));
 
         graph.add(LoadDynamicsFactor(
@@ -100,25 +96,25 @@ int main(int argc, char** argv) {
             load_mass,
             mu,
             gravity,
-            prior_noise
+            dynamics_cost
             ));
 
         // Factor 1: Enforce T_k >= 0
-        graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, unitNoise));
+        graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
         
         // Factor 2: Penalize if ||p_r - p_l|| > cable_length
-        graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, unitNoise));
+        //graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
         
         // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
-        graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, unitNoise));
+        graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
 
         // Add a soft cost on control input to keep it constrained (prevents wild solutions)
-        graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 3, tension_cost));
-        graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.3, tension_cost));
+        graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 3, control_cost));
+        graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.003, control_cost));
     }
 
     // Add a goal cost on the final load state
-    Vector4 final_load_goal(1.90055, 1.37719, -0.05, 0.01); // Goal: move to (10, 5)
+    Vector4 final_load_goal(-0.01, 0.001, -0.05, 0.01); // Goal: move to (10, 5)
     graph.add(PriorFactor<Vector4>(symbol_t('l', num_time_steps), final_load_goal, goal_cost));
 
 

@@ -23,7 +23,8 @@ export GZ_SIM_RESOURCE_PATH="/home/$USER/distributed_load_dragging/ros2_ws/src/r
 
 ### Simulation
 ```
-ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc:=True
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_two_robots:=True
 ```
 
 ### Real

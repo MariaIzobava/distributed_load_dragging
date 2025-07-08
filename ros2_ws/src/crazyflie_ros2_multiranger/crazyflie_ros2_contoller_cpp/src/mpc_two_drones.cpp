@@ -46,12 +46,14 @@ public:
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
 
-        position_.resize(6);
-        angles_.resize(3);
+        position1_.resize(6);
+        angles1_.resize(3);
+        position2_.resize(6);
+        angles2_.resize(3);
         load_position_.resize(6);
         load_angles_.resize(3);
 
-        is_pulling_ = false;
+        is_pulling_ = 0;
         desired_height_ = 0.5;
 
         path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
@@ -59,10 +61,15 @@ public:
           10, // QoS history depth
           std::bind(&GtsamCppTestNode::path_subscribe_callback, this, std::placeholders::_1));
 
-        odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-          robot_prefix_ + "/odom",
+        odom_subscription1_ = this->create_subscription<nav_msgs::msg::Odometry>(
+          robot_prefix_ + "_01/odom",
           10, // QoS history depth
-          std::bind(&GtsamCppTestNode::odom_subscribe_callback, this, std::placeholders::_1));
+          std::bind(&GtsamCppTestNode::odom1_subscribe_callback, this, std::placeholders::_1));
+
+        odom_subscription2_ = this->create_subscription<nav_msgs::msg::Odometry>(
+          robot_prefix_ + "_02/odom",
+          10, // QoS history depth
+          std::bind(&GtsamCppTestNode::odom2_subscribe_callback, this, std::placeholders::_1));
 
         load_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
           "load/odom",
@@ -74,30 +81,31 @@ public:
           10, // QoS history depth
           std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
 
-        twist_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_01", 10);
+        twist_publisher1_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_01", 10);
+        twist_publisher2_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_02", 10);
         timer_ = this->create_wall_timer(
         std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
         std::bind(&GtsamCppTestNode::timer_callback, this));
     }
 
 private:
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher1_, twist_publisher2_;
 
     // Subscribers
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription1_, odom_subscription2_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
-    std::vector<double> position_;
-    std::vector<double> angles_;
+    std::vector<double> position1_, position2_;
+    std::vector<double> angles1_, angles2_;
     std::vector<double> load_position_;
     std::vector<double> load_angles_;
     nav_msgs::msg::Path::SharedPtr path_;
 
-    bool is_pulling_;
+    int is_pulling_;
     double desired_height_;
     std::chrono::high_resolution_clock::time_point start_time_;
 
@@ -108,19 +116,20 @@ private:
         geometry_msgs::msg::Twist new_cmd_msg;
         new_cmd_msg.linear.z = -0.2;
             
-        twist_publisher_->publish(new_cmd_msg);
+        twist_publisher1_->publish(new_cmd_msg);
+        twist_publisher2_->publish(new_cmd_msg);
         return; 
     }
 
     // Callback functions
-    void odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+    void odom1_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
-        position_[0] = msg->pose.pose.position.x;
-        position_[1] = msg->pose.pose.position.y;
-        position_[2] = msg->pose.pose.position.z;
-        position_[3] = msg->twist.twist.linear.x;
-        position_[4] = msg->twist.twist.linear.y;
-        position_[5] = msg->twist.twist.linear.z;
+        position1_[0] = msg->pose.pose.position.x;
+        position1_[1] = msg->pose.pose.position.y;
+        position1_[2] = msg->pose.pose.position.z;
+        position1_[3] = msg->twist.twist.linear.x;
+        position1_[4] = msg->twist.twist.linear.y;
+        position1_[5] = msg->twist.twist.linear.z;
 
         // Quaternion to Euler conversion
         tf2::Quaternion q(
@@ -133,9 +142,34 @@ private:
         double roll, pitch, yaw;
         m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
 
-        angles_[0] = roll;
-        angles_[1] = pitch;
-        angles_[2] = yaw;
+        angles1_[0] = roll;
+        angles1_[1] = pitch;
+        angles1_[2] = yaw;
+    }
+
+    void odom2_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+    {
+        position2_[0] = msg->pose.pose.position.x;
+        position2_[1] = msg->pose.pose.position.y;
+        position2_[2] = msg->pose.pose.position.z;
+        position2_[3] = msg->twist.twist.linear.x;
+        position2_[4] = msg->twist.twist.linear.y;
+        position2_[5] = msg->twist.twist.linear.z;
+
+        // Quaternion to Euler conversion
+        tf2::Quaternion q(
+          msg->pose.pose.orientation.x,
+          msg->pose.pose.orientation.y,
+          msg->pose.pose.orientation.z,
+          msg->pose.pose.orientation.w);
+
+        tf2::Matrix3x3 m(q);
+        double roll, pitch, yaw;
+        m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
+
+        angles2_[0] = roll;
+        angles2_[1] = pitch;
+        angles2_[2] = yaw;
     }
 
     void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
@@ -170,18 +204,26 @@ private:
     
     void timer_callback()
     {
-        geometry_msgs::msg::Twist new_cmd_msg;
+        geometry_msgs::msg::Twist new_cmd_msg1, new_cmd_msg2;
 
         // If not flying --> takeoff
-        if (!is_pulling_) {
-            new_cmd_msg.linear.z = 0.1;
-            if (position_[2] > desired_height_) {
-                new_cmd_msg.linear.z = 0.0;
-                is_pulling_ = true;
+        if (is_pulling_ != 3) {
+            new_cmd_msg1.linear.z = 0.1;
+            new_cmd_msg2.linear.z = 0.1;
+            if (position1_[2] > desired_height_) {
+                new_cmd_msg1.linear.z = 0.0;
+                is_pulling_ |= 1;   
+            }
+            if (position2_[2] > desired_height_) {
+                new_cmd_msg2.linear.z = 0.0;
+                is_pulling_ |= 2;   
+            }
+            twist_publisher1_->publish(new_cmd_msg1);
+            twist_publisher2_->publish(new_cmd_msg2);
+            if (is_pulling_ == 3) {
                 start_time_ = std::chrono::high_resolution_clock::now();
                 RCLCPP_INFO(this->get_logger(), "Takeoff completed");
             }
-            twist_publisher_->publish(new_cmd_msg);
             return;
         }
 
@@ -191,19 +233,24 @@ private:
 
         // Now the drone is in "pulling" mode, control with MPC
 
-        // First, we're keeping the drone on the same height
-        double error = desired_height_ - position_[2];
-        new_cmd_msg.linear.z = error;
+        // First, we're keeping the drones on the same height
+        new_cmd_msg1.linear.z = desired_height_ - position1_[2];
+        new_cmd_msg2.linear.z = desired_height_ - position2_[2];
 
         auto next_velocity = get_next_velocity_();
 
         // Limiting velocities for safety
-        new_cmd_msg.linear.x = max(min(next_velocity[0], 0.2), -0.2);
-        new_cmd_msg.linear.y = max(min(next_velocity[1], 0.2), -0.2);
+        new_cmd_msg1.linear.x = max(min(next_velocity[0], 0.2), -0.2);
+        new_cmd_msg1.linear.y = max(min(next_velocity[1], 0.2), -0.2);
+
+        new_cmd_msg2.linear.x = max(min(next_velocity[2], 0.2), -0.2);
+        new_cmd_msg2.linear.y = max(min(next_velocity[3], 0.2), -0.2);
         
-        cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
+        cout << "Next velocity drone 1: " << new_cmd_msg1.linear.x << ' ' << new_cmd_msg1.linear.y << endl;
+        cout << "Next velocity drone 2: " << new_cmd_msg2.linear.x << ' ' << new_cmd_msg2.linear.y << endl;
         
-        twist_publisher_->publish(new_cmd_msg);
+        twist_publisher1_->publish(new_cmd_msg1);
+        twist_publisher2_->publish(new_cmd_msg2);
     }
 
     std::vector<double> get_next_velocity_() {
@@ -239,22 +286,28 @@ private:
         // --- Add Factors to the Graph ---
 
         // Add prior factors for the initial state
-        Vector4 initial_robot_state(
-            position_[0],
-            position_[1],
-            position_[3],
-            position_[4]);
+        Vector4 initial_robot1_state(
+            position1_[0],
+            position1_[1],
+            position1_[3],
+            position1_[4]);
+        Vector4 initial_robot2_state(
+            position2_[0],
+            position2_[1],
+            position2_[3],
+            position2_[4]);
         Vector4 initial_load_state(
             load_position_[0],
             load_position_[1],
             load_position_[3],
             load_position_[4]);
-        graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot_state, init_cost));
+        graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot1_state, init_cost));
+        graph.add(PriorFactor<Vector4>(symbol_t('X', 0), initial_robot2_state, init_cost));
         graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, init_cost));
 
         auto next_p = get_next_points();
         cout << "Cur load position: " << load_position_[0] <<  ' ' << load_position_[1] << std::endl;
-        cout << "Cur robot position: " << position_[0] <<  ' ' << position_[1] << std::endl;
+        cout << "Cur robot 1 position: " << position1_[0] <<  ' ' << position1_[1] << std::endl;
 
         // for (int i = 0; i < 20; i++) {
         //     cout << "Next position: " << next_p[i * 2] << ' ' << next_p[i * 2 + 1] << std::endl;
@@ -272,10 +325,23 @@ private:
                 dynamics_cost
                 ));
 
-            graph.add(LoadDynamicsFactor(
+            graph.add(RobotDynamicsFactor(
+                symbol_t('X', k), 
+                symbol_t('l', k),
+                symbol_t('U', k),
+                symbol_t('T', k),
+                symbol_t('X', k+1),
+                dt,
+                robot_mass,
+                dynamics_cost
+                ));
+
+            graph.add(LoadDynamicsTwoRobotsFactor(
                 symbol_t('l', k),
                 symbol_t('x', k),
                 symbol_t('t', k),
+                symbol_t('X', k),
+                symbol_t('T', k),
                 symbol_t('l', k+1),
                 dt,
                 load_mass,
@@ -286,16 +352,20 @@ private:
 
             // Factor 1: Enforce T_k >= 0
             graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
+            graph.add(TensionLowerBoundFactor(symbol_t('T', k), weight_tension_lower_bound, tension_cost));
             
             // Factor 2: Penalize if ||p_r - p_l|| > cable_length
             //graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
             
             // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
             graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
+            graph.add(TensionSlackPenaltyFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
 
             // Add a soft cost on control input to keep it constrained (prevents wild and too slow solutions).
             graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), u_upper_bound, control_cost));
             graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), u_lower_bound, control_cost));
+            graph.add(MagnitudeUpperBoundFactor(symbol_t('U', k), u_upper_bound, control_cost));
+            graph.add(MagnitudeLowerBoundFactor(symbol_t('U', k), u_lower_bound, control_cost));
 
             // Vector4 final_load_goal(
             //     next_p[k * 2],
@@ -329,12 +399,15 @@ private:
         Vector1 init_t(0.0);
         for (int k = 0; k <= num_time_steps; ++k) {
             // A simple initial guess: stay at the start position.
-            initial_values.insert(symbol_t('x', k), initial_robot_state);
+            initial_values.insert(symbol_t('x', k), initial_robot1_state);
+            initial_values.insert(symbol_t('X', k), initial_robot2_state);
             initial_values.insert(symbol_t('l', k), initial_load_state);
             // Initial guess for controls is zero.
             if (k < num_time_steps) {
                 initial_values.insert(symbol_t('u', k), init_u);
                 initial_values.insert(symbol_t('t', k), init_t);
+                initial_values.insert(symbol_t('U', k), init_u);
+                initial_values.insert(symbol_t('T', k), init_t);
             }
         }
 
@@ -350,11 +423,13 @@ private:
         cout << "Initial Error: " << graph.error(initial_values) << endl;
         cout << "Final Error: " << graph.error(result) << endl;
 
-        Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
-        Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 1));
+        Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
+        Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));
+        Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 1));
+        Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 1));
 
-        cout << "Next control: " << next_ctrl[0] << ' ' << next_ctrl[1] << endl;
-        return {next_state[2], next_state[3]};
+        cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
+        return {next_state1[2], next_state1[3], next_state2[2], next_state2[3]};
     }
 
     std::vector<double> get_next_points() {
@@ -366,7 +441,7 @@ private:
         // Calculate seconds from the beginning
         auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
 
-        int i = (cur_millisec.count() / 100 + 1) % num_p;
+        int i = (cur_millisec.count() / 100 + 20) % num_p;
         cout << i << ' ' << path_->poses.size() << std::endl;
         std::vector<double> ans;
         // for (int j = 0; j < 20; j++) {

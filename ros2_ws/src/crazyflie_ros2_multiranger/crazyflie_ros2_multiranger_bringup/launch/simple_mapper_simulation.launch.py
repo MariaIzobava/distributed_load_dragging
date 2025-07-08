@@ -8,7 +8,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-
+from launch.conditions import IfCondition
 from launch_ros.actions import Node
 
 
@@ -21,7 +21,10 @@ def generate_launch_description():
     # Setup to launch a crazyflie gazebo simulation from the ros_gz_crazyflie project
     crazyflie_simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_project_crazyflie_gazebo, 'launch', 'crazyflie_simulation.launch.py'))
+            os.path.join(pkg_project_crazyflie_gazebo, 'launch', 'crazyflie_simulation.launch.py')),
+        launch_arguments={
+            'two_drones': LaunchConfiguration('graph_mpc_two_robots') 
+        }.items()
     )
 
     # start a simple mapper node
@@ -31,7 +34,7 @@ def generate_launch_description():
         name='trajectory_publisher',
         output='screen',
         parameters=[
-            {'robot_prefix': 'crazyflie'},
+            {'robot_prefix': 'crazyflie_01'},
             {'use_sim_time': True}
         ]
     )
@@ -42,47 +45,14 @@ def generate_launch_description():
         name='load_path_publisher',
         output='screen',
         parameters=[
-            {'robot_prefix': 'crazyflie'},
             {'use_sim_time': True}
         ]
     )
 
-    mpc_controller = Node(
-        package='crazyflie_ros2_controller',
-        executable='mpc',
-        output='screen',
-        parameters=[
-            {'desired_height': 0.7},
-            {'robot_prefix': 'crazyflie'},
-        ]
-    )
-
-    mpcg_controller = Node(
-        package='crazyflie_ros2_contoller_cpp',
-        executable='mpc',
-        output='screen',
-        parameters=[
-            {'desired_height': 0.7},
-            {'robot_prefix': 'crazyflie'},
-        ]
-    )
-
-    # start a simple mapper node
-    # simple_mapper = Node(
-    #     package='crazyflie_ros2_multiranger_simple_mapper',
-    #     executable='simple_mapper_multiranger',
-    #     name='simple_mapper',
-    #     output='screen',
-    #     parameters=[
-    #         {'robot_prefix': 'crazyflie'},
-    #         {'use_sim_time': True}
-    #     ]
-    # )
-
     rviz_config_path = os.path.join(
         get_package_share_directory('crazyflie_ros2_multiranger_bringup'),
         'config',
-        'sim_mapping.rviz')
+        'custom_mapping.rviz')
 
     rviz = Node(
             package='rviz2',
@@ -95,12 +65,64 @@ def generate_launch_description():
             }]
             )
 
+    ###############
+    # CONTROLLERS #
+    ############### 
+
+    mpc_controller = Node(
+        package='crazyflie_ros2_controller',
+        executable='mpc',
+        output='screen',
+        parameters=[
+            {'desired_height': 0.7},
+            {'robot_prefix': 'crazyflie_01'},
+        ],
+        condition=IfCondition(LaunchConfiguration('basic_mpc'))
+    )
+
+    mpcg_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc',
+        output='screen',
+        parameters=[
+            {'desired_height': 0.7},
+            {'robot_prefix': 'crazyflie_01'},
+        ],
+        condition=IfCondition(LaunchConfiguration('graph_mpc'))
+    )
+
+    mpcg_two_drones_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc_two_drones',
+        output='screen',
+        parameters=[
+            {'robot_prefix': 'crazyflie'}, # indexes will be added in the code
+        ],
+        condition=IfCondition(LaunchConfiguration('graph_mpc_two_robots'))
+    )
+
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'basic_mpc',
+            default_value='false',
+            description='Basic python MPC controller, considers cable to be always non-slack'
+        ),
+        DeclareLaunchArgument(
+            'graph_mpc',
+            default_value='false',
+            description='MPC on factor graph for a single robot.'
+        ),
+        DeclareLaunchArgument(
+            'graph_mpc_two_robots',
+            default_value='false',
+            description='MPC on factor graph for 2 robots.'
+        ),
+
         crazyflie_simulation,
         simple_traj_publisher,
         load_path_publisher,
-        #mpc_controller,
+        mpc_controller,
         mpcg_controller,
-        #simple_mapper,
+        mpcg_two_drones_controller,
         rviz
         ])

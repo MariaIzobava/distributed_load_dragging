@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.8">
-  <model name="small_segment">
+  <model name="segment">
     <link name="segment_link">
       <inertial>
         <mass>0.00001</mass>
@@ -15,8 +15,8 @@
         <pose>0 0 0 0 1.5708 0</pose>
         <geometry>
           <cylinder>
-            <radius>0.02</radius>
-            <length>0.1</length> </cylinder>
+            <radius>0.002</radius>
+            <length>0.5</length> </cylinder>
         </geometry>
         <material>
           <ambient>0.2 0.2 0.2 1</ambient>
@@ -25,18 +25,35 @@
           <emissive>0.0 0.0 0.0 1</emissive>
         </material>
       </visual>
-      <collision name="segment_collision">
+      <!-- <collision name="segment_collision">
         <pose>0 0 0 0 1.5708 0</pose>
         <geometry>
           <cylinder>
-            <radius>0.02</radius>
-            <length>0.1</length>
+            <radius>0.002</radius>
+            <length>0.5</length>
           </cylinder>
         </geometry>
-      </collision>
+      </collision> -->
     </link>
+    <link name="segment_start">
+        <pose>-0.25 0 0 0 0 0</pose> 
+        <inertial>
+          <mass>1e-9</mass>
+          <inertia>
+            <ixx>1e-9</ixx>
+            <iyy>1e-9</iyy>
+            <izz>1e-9</izz>
+        </inertia>
+        </inertial>
+        <visual name="start_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual>
+        <collision name="start_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision>
+    </link>
+    <joint name="start_joint" type="fixed">
+        <parent>segment_link</parent>
+        <child>segment_start</child>
+    </joint>
     <link name="segment_end">
-        <pose>0.05 0 0 0 0 0</pose> 
+        <pose>0.25 0 0 0 0 0</pose> 
         <inertial>
           <mass>1e-9</mass>
           <inertia>
@@ -49,8 +66,8 @@
         <collision name="end_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision>
     </link>
     <joint name="end_joint" type="fixed">
-        <parent>segment_link</parent>
-        <child>segment_end</child>
+        <parent>segment_end</parent>
+        <child>segment_link</child>
     </joint>
   </model>
 </sdf>

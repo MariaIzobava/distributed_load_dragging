@@ -39,7 +39,7 @@ class TrajectoryPublisher(Node):
         radius = 2.0
         num_points = 5000
 
-        cur_points = int((cur_time - self.start_time) / 100 + 20 ) % num_points
+        cur_points = int((cur_time - self.start_time) / 100 + 60) % num_points
         for i in range(cur_points):
             angle = 2 * math.pi * i / num_points - math.pi / 2.0
             pose = PoseStamped()

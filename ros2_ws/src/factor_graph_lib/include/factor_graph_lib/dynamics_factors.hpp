@@ -65,4 +65,33 @@ public:
                          gtsam::OptionalMatrixType H4) const override;
 };
 
+
+class LoadDynamicsTwoRobotsFactor: public NoiseModelFactor6<Vector4, Vector4, Vector1, Vector4, Vector1, Vector4> {
+    double dt_;
+    double load_mass_;
+    double mu_;
+    double g_;
+
+public:
+    LoadDynamicsTwoRobotsFactor(Key key_xl_k, Key key_xr1_k, Key key_tension1_k, Key key_xr2_k, Key key_tension2_k, Key key_xl_k_plus_1,
+                        double dt, double load_mass, double mu, double g, const SharedNoiseModel& model) :
+        NoiseModelFactor6<Vector4, Vector4, Vector1, Vector4, Vector1, Vector4>(model, key_xl_k, key_xr1_k, key_tension1_k, key_xr2_k, key_tension2_k, key_xl_k_plus_1),
+        dt_(dt), load_mass_(load_mass), mu_(mu), g_(g) {}
+
+    Vector evaluateError(const Vector4& xl_k, 
+                         const Vector4& xr1_k,
+                         const Vector1& tension1_k,
+                         const Vector4& xr2_k,
+                         const Vector1& tension2_k,
+                         const Vector4& xl_k_plus_1,
+                         gtsam::OptionalMatrixType H1,
+                         gtsam::OptionalMatrixType H2,
+                         gtsam::OptionalMatrixType H3,
+                         gtsam::OptionalMatrixType H4,
+                         gtsam::OptionalMatrixType H5,
+                         gtsam::OptionalMatrixType H6) const override;
+};
+
+
+
 #endif // DYNAMICS_FACTORS_HPP

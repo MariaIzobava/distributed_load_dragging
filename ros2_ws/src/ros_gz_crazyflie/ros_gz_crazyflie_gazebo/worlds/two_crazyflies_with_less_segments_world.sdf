@@ -14,7 +14,8 @@ Copyright (c) 2022 Bitcraze
 <sdf version="1.6">
   <world name="crazyflie_world">
     <physics name="1ms" type="ignored">
-      <max_step_size>0.001</max_step_size>
+      <max_step_size>0.0005</max_step_size>
+      <!-- <max_step_size>0.0005</max_step_size> -->
       <real_time_factor>1.0</real_time_factor>
     </physics>
     <plugin
@@ -75,13 +76,20 @@ Copyright (c) 2022 Bitcraze
         </visual>
       </link>
     </model>
+    
 
     <include>
-      <uri>model://load_small</uri>
+      <uri>model://load_large</uri>
       <name>the_load</name>
       <pose>0.2 0 0 0 0 0</pose>
       <!-- <pose>0.16 0 0 0 0 0</pose> -->
     </include>
+
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
 
     <include>
       <uri>model://crazyflie_01</uri>
@@ -120,6 +128,53 @@ Copyright (c) 2022 Bitcraze
       <pose relative_to='segment_2::segment_end'>0 0 0 0 0 0</pose>
       <parent>the_load::x_hook</parent>
       <child>segment_2::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+
+    <include>
+      <uri>model://crazyflie_02</uri>
+      <name>crazyflie_02</name>
+      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
+      <pose>0.2 1.23 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment2_1</name>
+      <pose>0.2 0.97 0 0 0 -1.57</pose> 
+    </include>
+
+    <joint name="drone2_to_cable_01" type="ball">
+      <pose relative_to='crazyflie_02::hook_link'>0 0 0 0 0 0</pose> 
+      <parent>segment2_1::segment_start</parent> 
+      <child>crazyflie_02::hook_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment2_2</name>
+      <pose>0.2 0.46 0 0 0 -1.57</pose>
+    </include>
+
+    <joint name="segment2_1_to_2" type="ball">
+      <pose relative_to='segment2_1::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment2_2::segment_start</parent>
+      <child>segment2_1::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <joint name="cable2_2_to_load" type="ball">
+      <pose relative_to='segment2_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>the_load::y_hook</parent>
+      <child>segment2_2::segment_end</child>
       <axis><xyz>0 1 0</xyz></axis>
     </joint>
   </world>

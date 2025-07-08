@@ -19,9 +19,18 @@ include_directories(
 
 
 add_executable(mpc src/mpc.cpp)
+add_executable(mpc_two_drones src/mpc_two_drones.cpp)
 
 ament_target_dependencies(
   mpc
+  rclcpp
+  GTSAM
+  nav_msgs
+  tf2
+  factor_graph_lib
+)
+ament_target_dependencies(
+  mpc_two_drones
   rclcpp
   GTSAM
   nav_msgs
@@ -33,6 +42,10 @@ target_link_libraries(mpc
   gtsam
   gtsam_unstable
 )
+target_link_libraries(mpc_two_drones
+  gtsam
+  gtsam_unstable
+)
 
 
 target_include_directories(mpc PUBLIC
@@ -40,8 +53,15 @@ target_include_directories(mpc PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(mpc PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
+target_include_directories(mpc_two_drones PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(mpc_two_drones PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
 
 install(TARGETS mpc
+  DESTINATION lib/${PROJECT_NAME})
+install(TARGETS mpc_two_drones
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

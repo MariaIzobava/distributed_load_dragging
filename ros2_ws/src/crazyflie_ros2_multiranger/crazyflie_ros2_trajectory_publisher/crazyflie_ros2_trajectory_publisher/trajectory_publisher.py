@@ -37,9 +37,9 @@ class TrajectoryPublisher(Node):
 
         # Example: A simple circular path
         radius = 2.0
-        num_points = 5000
+        num_points = 4000
 
-        cur_points = int((cur_time - self.start_time) / 100 + 60) % num_points
+        cur_points = int((cur_time - self.start_time) / 100 + 120) % num_points
         for i in range(cur_points):
             angle = 2 * math.pi * i / num_points - math.pi / 2.0
             pose = PoseStamped()
@@ -48,6 +48,7 @@ class TrajectoryPublisher(Node):
             pose.pose.position.x = -radius * math.cos(angle)
             pose.pose.position.y = radius * math.sin(angle) + 2
             pose.pose.position.z = 0.0 # Assuming 2D path
+            pose.pose.orientation.x = -angle - math.pi / 2.0 # saving orientation
             path_msg.poses.append(pose)
 
         self.publisher_.publish(path_msg)

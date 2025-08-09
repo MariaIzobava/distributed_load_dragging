@@ -20,6 +20,8 @@ include_directories(
 
 add_executable(mpc src/mpc.cpp)
 add_executable(mpc_two_drones src/mpc_two_drones.cpp)
+add_executable(mpc_with_orientation src/mpc_with_orientation.cpp)
+add_executable(mpc_two_drones_with_orientation src/mpc_two_drones_with_orientation.cpp)
 
 ament_target_dependencies(
   mpc
@@ -37,6 +39,22 @@ ament_target_dependencies(
   tf2
   factor_graph_lib
 )
+ament_target_dependencies(
+  mpc_with_orientation
+  rclcpp
+  GTSAM
+  nav_msgs
+  tf2
+  factor_graph_lib
+)
+ament_target_dependencies(
+  mpc_two_drones_with_orientation
+  rclcpp
+  GTSAM
+  nav_msgs
+  tf2
+  factor_graph_lib
+)
 
 target_link_libraries(mpc
   gtsam
@@ -46,7 +64,14 @@ target_link_libraries(mpc_two_drones
   gtsam
   gtsam_unstable
 )
-
+target_link_libraries(mpc_with_orientation
+  gtsam
+  gtsam_unstable
+)
+target_link_libraries(mpc_two_drones_with_orientation
+  gtsam
+  gtsam_unstable
+)
 
 target_include_directories(mpc PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -58,10 +83,23 @@ target_include_directories(mpc_two_drones PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(mpc_two_drones PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
+target_include_directories(mpc_with_orientation PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(mpc_with_orientation PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+target_include_directories(mpc_two_drones_with_orientation PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(mpc_two_drones_with_orientation PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
 install(TARGETS mpc
   DESTINATION lib/${PROJECT_NAME})
 install(TARGETS mpc_two_drones
+  DESTINATION lib/${PROJECT_NAME})
+install(TARGETS mpc_with_orientation
+  DESTINATION lib/${PROJECT_NAME})
+  install(TARGETS mpc_two_drones_with_orientation
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

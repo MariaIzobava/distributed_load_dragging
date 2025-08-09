@@ -19,9 +19,7 @@
 #include "tf2/LinearMath/Matrix3x3.h"
 
 // My Factor Graph classes
-#include "factor_graph_lib/cable_factors.hpp"
-#include "factor_graph_lib/control_factors.hpp"
-#include "factor_graph_lib/dynamics_factors.hpp"
+#include "factor_graph_lib/factor_executor.hpp"
 
 #include <vector>
 #include <string> 
@@ -254,186 +252,206 @@ private:
     }
 
     std::vector<double> get_next_velocity_() {
-        NonlinearFactorGraph graph;
-
-        // --- Define problem parameters ---
-        const int num_time_steps = 20;
-        const double dt = 0.005;
-        const double robot_mass = 0.025; // kg
-        const double load_mass = 0.001;   // kg
-        const double gravity = -9.81;
-        const double mu = 0.3;
-        const double cable_length = 1.02; // 0.98; // 1.0; // 0.8; // 1.056; // meters
-        const double u_upper_bound = 0.4;
-        const double u_lower_bound = 0.003;
-        double weight_tension_lower_bound = 1000000.0; // High weight to strongly enforce T >= 0
-        //double weight_cable_stretch = 1000000.0;     // Very high weight to strongly prevent cable from over-stretching
-        double weight_tension_slack = 50.0;
-
-        // --- Define Noise Models ---
-        // These represent the uncertainty of each factor (1/covariance)
-        auto dynamics_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
-        auto traj_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.07, 0.07, 1000.1, 1000.1).finished());
-        auto goal_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.00005, 0.00005, 1000.1, 1000.1).finished());
-        auto init_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
-        auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
-        auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
-
-        // --- Add Factors to the Graph ---
-
-        // Add prior factors for the initial state
         Vector4 initial_robot1_state(
-            position1_[0],
-            position1_[1],
-            position1_[3],
-            position1_[4]);
+            position1_[0], position1_[1],
+            position1_[3], position1_[4]
+        );
         Vector4 initial_robot2_state(
-            position2_[0],
-            position2_[1],
-            position2_[3],
-            position2_[4]);
+            position2_[0], position2_[1],
+            position2_[3], position2_[4]
+        );
         Vector4 initial_load_state(
-            load_position_[0],
-            load_position_[1],
-            load_position_[3],
-            load_position_[4]);
-        graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot1_state, init_cost));
-        graph.add(PriorFactor<Vector4>(symbol_t('X', 0), initial_robot2_state, init_cost));
-        graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, init_cost));
+            load_position_[0], load_position_[1],
+            load_position_[3], load_position_[4]
+        );
 
         auto next_p = get_next_points();
-        cout << "Cur load position: " << load_position_[0] <<  ' ' << load_position_[1] << std::endl;
-        cout << "Cur robot 1 position: " << position1_[0] <<  ' ' << position1_[1] << std::endl;
+        Vector4 final_load_goal(
+            next_p[0], next_p[1],
+            0,          0 // doesn't matter
+        );
 
-        // for (int i = 0; i < 20; i++) {
-        //     cout << "Next position: " << next_p[i * 2] << ' ' << next_p[i * 2 + 1] << std::endl;
+        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << std::endl;
+        cout << "Cur robot 1 position: " << initial_robot1_state[0] <<  ", " << initial_robot1_state[1] << ", " << initial_robot1_state[2] <<  ", " << initial_robot1_state[3] <<  std::endl;
+        cout << "Cur robot 2 position: " << initial_robot2_state[0] <<  ", " << initial_robot2_state[1] << ", " << initial_robot2_state[2] <<  ", " << initial_robot2_state[3] <<  std::endl;       
+        cout << "Robots height: " << position1_[2] << ' ' << position2_[2] << std::endl;
+        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1] << std::endl;
+
+        auto executor = FactorExecutorFactory::create(0, initial_load_state, initial_robot1_state, initial_robot2_state, final_load_goal, position1_[2], position2_[2]);
+        return executor->run();
+
+        // NonlinearFactorGraph graph;
+
+        // // --- Define problem parameters ---
+        // const int num_time_steps = 20;
+        // const double dt = 0.005;
+        // const double robot_mass = 0.025; // kg
+        // const double load_mass = 0.01;   // kg
+        // const double gravity = 9.81;
+        // const double mu = 0.3;
+        // const double cable_length = 1.02; // 0.98; // 1.0; // 0.8; // 1.056; // meters
+        // const double u_upper_bound = 0.9;
+        // const double u_lower_bound = 0.003;
+        // double weight_tension_lower_bound = 1000000.0; // High weight to strongly enforce T >= 0
+        // double weight_cable_stretch = 100.0;     // Very high weight to strongly prevent cable from over-stretching
+        // double weight_tension_slack = 50.0;
+        // const double cable_length1 = 0.20 + sqrt(1.03 * 1.03 - (position1_[2]) * (position1_[2]));
+        // const double cable_length2 = 0.20 + sqrt(1.03 * 1.03 - (position2_[2]) * (position2_[2]));
+
+
+        // // --- Define Noise Models ---
+        // // These represent the uncertainty of each factor (1/covariance)
+        // auto dynamics_cost = noiseModel::Diagonal::Sigmas(
+        //     (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
+        // auto traj_cost = noiseModel::Diagonal::Sigmas(
+        //     (Vector(4) << 0.07, 0.07, 1000.1, 1000.1).finished());
+        // auto goal_cost = noiseModel::Diagonal::Sigmas(
+        //     (Vector(4) << 0.00005, 0.00005, 1000.1, 1000.1).finished());
+        // auto init_cost = noiseModel::Diagonal::Sigmas(
+        //     (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
+        // auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
+        // auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-2);
+
+        // // --- Add Factors to the Graph ---
+
+        // // Add prior factors for the initial state
+        // Vector4 initial_robot1_state(
+        //     position1_[0],
+        //     position1_[1],
+        //     position1_[3],
+        //     position1_[4]);
+        // Vector4 initial_robot2_state(
+        //     position2_[0],
+        //     position2_[1],
+        //     position2_[3],
+        //     position2_[4]);
+        // Vector4 initial_load_state(
+        //     load_position_[0],
+        //     load_position_[1],
+        //     load_position_[3],
+        //     load_position_[4]);
+        // graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot1_state, init_cost));
+        // graph.add(PriorFactor<Vector4>(symbol_t('X', 0), initial_robot2_state, init_cost));
+        // graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, init_cost));
+
+        // auto next_p = get_next_points();
+        // // cout << "Cur load position: " << load_position_[0] <<  ' ' << load_position_[1] << std::endl;
+        // // cout << "Cur robot 1 position: " << position1_[0] <<  ' ' << position1_[1] << std::endl;
+        // Vector4 final_load_goal(
+        //     next_p[0],
+        //     next_p[1],
+        //     load_position_[3], // doesn't matter
+        //     load_position_[4]);  // doesn't matter
+        // graph.add(PriorFactor<Vector4>(symbol_t('l', num_time_steps), final_load_goal, goal_cost));
+
+        // double xdiff = (final_load_goal(0) - initial_load_state(0)) / num_time_steps;
+        // double ydiff = (final_load_goal(1) - initial_load_state(1)) / num_time_steps;
+        // Vector4 diff(xdiff, ydiff, 0, 0);
+
+        // for (int k = 0; k < num_time_steps; ++k) {
+        //     graph.add(RobotDynamicsFactor(
+        //         symbol_t('x', k), 
+        //         symbol_t('l', k),
+        //         symbol_t('u', k),
+        //         symbol_t('t', k),
+        //         symbol_t('x', k+1),
+        //         dt,
+        //         robot_mass,
+        //         dynamics_cost
+        //         ));
+
+        //     graph.add(RobotDynamicsFactor(
+        //         symbol_t('X', k), 
+        //         symbol_t('l', k),
+        //         symbol_t('U', k),
+        //         symbol_t('T', k),
+        //         symbol_t('X', k+1),
+        //         dt,
+        //         robot_mass,
+        //         dynamics_cost
+        //         ));
+
+        //     graph.add(LoadDynamicsTwoRobotsFactor(
+        //         symbol_t('l', k),
+        //         symbol_t('x', k),
+        //         symbol_t('t', k),
+        //         symbol_t('X', k),
+        //         symbol_t('T', k),
+        //         symbol_t('l', k+1),
+        //         dt,
+        //         load_mass,
+        //         mu,
+        //         gravity,
+        //         dynamics_cost
+        //         ));
+
+        //     // Factor 1: Enforce T_k >= 0
+        //     graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
+        //     graph.add(TensionLowerBoundFactor(symbol_t('T', k), weight_tension_lower_bound, tension_cost));
+            
+        //     // Factor 2: Penalize if ||p_r - p_l|| > cable_length
+        //     //graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length1, weight_cable_stretch, tension_cost));
+        //     //graph.add(CableStretchPenaltyFactor(symbol_t('X', k), symbol_t('l', k), cable_length2, weight_cable_stretch, tension_cost));
+            
+        //     // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
+        //     graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length1 - 0.007, weight_tension_slack, tension_cost));
+        //     graph.add(TensionSlackPenaltyFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length2 - 0.007, weight_tension_slack, tension_cost));
+
+        //     // Add a soft cost on control input to keep it constrained (prevents wild and too slow solutions).
+        //     graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), u_upper_bound, control_cost));
+        //     graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), u_lower_bound, control_cost));
+        //     graph.add(MagnitudeUpperBoundFactor(symbol_t('U', k), u_upper_bound, control_cost));
+        //     graph.add(MagnitudeLowerBoundFactor(symbol_t('U', k), u_lower_bound, control_cost));
+
+        //     if (k > 0) {
+        //         Vector4 mid_state(4);
+        //         mid_state << initial_load_state + k * diff;
+        //         graph.add(PriorFactor<Vector4>(symbol_t('l', k), mid_state, goal_cost));
+        //     }
         // }
 
-        for (int k = 0; k < num_time_steps; ++k) {
-            graph.add(RobotDynamicsFactor(
-                symbol_t('x', k), 
-                symbol_t('l', k),
-                symbol_t('u', k),
-                symbol_t('t', k),
-                symbol_t('x', k+1),
-                dt,
-                robot_mass,
-                dynamics_cost
-                ));
-
-            graph.add(RobotDynamicsFactor(
-                symbol_t('X', k), 
-                symbol_t('l', k),
-                symbol_t('U', k),
-                symbol_t('T', k),
-                symbol_t('X', k+1),
-                dt,
-                robot_mass,
-                dynamics_cost
-                ));
-
-            graph.add(LoadDynamicsTwoRobotsFactor(
-                symbol_t('l', k),
-                symbol_t('x', k),
-                symbol_t('t', k),
-                symbol_t('X', k),
-                symbol_t('T', k),
-                symbol_t('l', k+1),
-                dt,
-                load_mass,
-                mu,
-                gravity,
-                dynamics_cost
-                ));
-
-            // Factor 1: Enforce T_k >= 0
-            graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
-            graph.add(TensionLowerBoundFactor(symbol_t('T', k), weight_tension_lower_bound, tension_cost));
-            
-            // Factor 2: Penalize if ||p_r - p_l|| > cable_length
-            //graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
-            
-            // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
-            graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
-            graph.add(TensionSlackPenaltyFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
-
-            // Add a soft cost on control input to keep it constrained (prevents wild and too slow solutions).
-            graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), u_upper_bound, control_cost));
-            graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), u_lower_bound, control_cost));
-            graph.add(MagnitudeUpperBoundFactor(symbol_t('U', k), u_upper_bound, control_cost));
-            graph.add(MagnitudeLowerBoundFactor(symbol_t('U', k), u_lower_bound, control_cost));
-
-            // Vector4 final_load_goal(
-            //     next_p[k * 2],
-            //     next_p[k * 2 + 1],
-            //     load_position_[3], // doesn't matter
-            //     load_position_[4]);  // doesn't matter
-            
-            // if (k == num_time_steps - 1) {
-            //     graph.add(PriorFactor<Vector4>(symbol_t('l', k + 1), final_load_goal, goal_cost));
-            // } 
-            // else {
-            //     graph.add(PriorFactor<Vector4>(symbol_t('l', k + 1), final_load_goal, traj_cost));
-            // }
-        }
-
-        
-
-        
-        Vector4 final_load_goal(
-            next_p[0],
-            next_p[1],
-            load_position_[3], // doesn't matter
-            load_position_[4]);  // doesn't matter
-        graph.add(PriorFactor<Vector4>(symbol_t('l', num_time_steps), final_load_goal, goal_cost));
+        // // --- 3. Create Initial Estimate ---
+        // // The optimizer needs an initial guess for all variables.
+        // Values initial_values;
+        // Vector2 init_u(0.0, 0.0);
+        // Vector1 init_t(0.0);
+        // for (int k = 0; k <= num_time_steps; ++k) {
+        //     // A simple initial guess: stay at the start position.
+        //     initial_values.insert(symbol_t('x', k), initial_robot1_state);
+        //     initial_values.insert(symbol_t('X', k), initial_robot2_state);
+        //     initial_values.insert(symbol_t('l', k), initial_load_state);
+        //     // Initial guess for controls is zero.
+        //     if (k < num_time_steps) {
+        //         initial_values.insert(symbol_t('u', k), init_u);
+        //         initial_values.insert(symbol_t('t', k), init_t);
+        //         initial_values.insert(symbol_t('U', k), init_u);
+        //         initial_values.insert(symbol_t('T', k), init_t);
+        //     }
+        // }
 
 
-        // --- 3. Create Initial Estimate ---
-        // The optimizer needs an initial guess for all variables.
-        Values initial_values;
-        Vector2 init_u(0.0, 0.0);
-        Vector1 init_t(0.0);
-        for (int k = 0; k <= num_time_steps; ++k) {
-            // A simple initial guess: stay at the start position.
-            initial_values.insert(symbol_t('x', k), initial_robot1_state);
-            initial_values.insert(symbol_t('X', k), initial_robot2_state);
-            initial_values.insert(symbol_t('l', k), initial_load_state);
-            // Initial guess for controls is zero.
-            if (k < num_time_steps) {
-                initial_values.insert(symbol_t('u', k), init_u);
-                initial_values.insert(symbol_t('t', k), init_t);
-                initial_values.insert(symbol_t('U', k), init_u);
-                initial_values.insert(symbol_t('T', k), init_t);
-            }
-        }
+        // // // --- 4. Optimize ---
+        // LevenbergMarquardtParams params;
+        // //params.setVerbosity("TERMINATION"); // Print info at the end
+        // LevenbergMarquardtOptimizer optimizer(graph, initial_values, params);
 
+        // cout << "\nOptimizing..." << endl;
+        // Values result = optimizer.optimize();
+        // cout << "Optimization complete." << endl;
+        // cout << "Initial Error: " << graph.error(initial_values) << endl;
+        // cout << "Final Error: " << graph.error(result) << endl;
 
-        // // --- 4. Optimize ---
-        LevenbergMarquardtParams params;
-        //params.setVerbosity("TERMINATION"); // Print info at the end
-        LevenbergMarquardtOptimizer optimizer(graph, initial_values, params);
+        // Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
+        // Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));
+        // Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 1));
+        // Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 1));
 
-        cout << "\nOptimizing..." << endl;
-        Values result = optimizer.optimize();
-        cout << "Optimization complete." << endl;
-        cout << "Initial Error: " << graph.error(initial_values) << endl;
-        cout << "Final Error: " << graph.error(result) << endl;
-
-        Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
-        Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));
-        Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 1));
-        Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 1));
-
-        cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
-        return {next_state1[2], next_state1[3], next_state2[2], next_state2[3]};
+        // cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
+        // return {next_state1[2], next_state1[3], next_state2[2], next_state2[3]};
     }
 
     std::vector<double> get_next_points() {
-        int num_p = 5000; // num_p is number of points
+        int num_p = 4000; // num_p is number of points
         
         // Get current time
         auto cur_time = std::chrono::high_resolution_clock::now();
@@ -441,13 +459,9 @@ private:
         // Calculate seconds from the beginning
         auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
 
-        int i = (cur_millisec.count() / 100 + 20) % num_p;
+        int i = (cur_millisec.count() / 100 + 60) % num_p;
         cout << i << ' ' << path_->poses.size() << std::endl;
         std::vector<double> ans;
-        // for (int j = 0; j < 20; j++) {
-        //     ans.push_back(path_->poses[i + j].pose.position.x);
-        //     ans.push_back(path_->poses[i + j].pose.position.y);
-        // }
         ans.push_back(path_->poses[i].pose.position.x);
         ans.push_back(path_->poses[i].pose.position.y);
 

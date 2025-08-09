@@ -7,7 +7,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.conditions import IfCondition
 from launch_ros.actions import Node
 
@@ -22,8 +22,8 @@ def generate_launch_description():
     crazyflie_simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_project_crazyflie_gazebo, 'launch', 'crazyflie_simulation.launch.py')),
-        launch_arguments={
-            'two_drones': LaunchConfiguration('graph_mpc_two_robots') 
+        launch_arguments={ 
+            'two_drones': LaunchConfiguration('two_robots'), 
         }.items()
     )
 
@@ -52,7 +52,7 @@ def generate_launch_description():
     rviz_config_path = os.path.join(
         get_package_share_directory('crazyflie_ros2_multiranger_bringup'),
         'config',
-        'custom_mapping.rviz')
+        'custom_config.rviz')
 
     rviz = Node(
             package='rviz2',
@@ -91,6 +91,17 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('graph_mpc'))
     )
 
+    mpcg_with_angle_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc_with_orientation',
+        output='screen',
+        parameters=[
+            {'desired_height': 0.7},
+            {'robot_prefix': 'crazyflie_01'},
+        ],
+        condition=IfCondition(LaunchConfiguration('graph_mpc_with_ori'))
+    )
+
     mpcg_two_drones_controller = Node(
         package='crazyflie_ros2_contoller_cpp',
         executable='mpc_two_drones',
@@ -99,6 +110,16 @@ def generate_launch_description():
             {'robot_prefix': 'crazyflie'}, # indexes will be added in the code
         ],
         condition=IfCondition(LaunchConfiguration('graph_mpc_two_robots'))
+    )
+
+    mpcg_two_drones_with_angle_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc_two_drones_with_orientation',
+        output='screen',
+        parameters=[
+            {'robot_prefix': 'crazyflie'}, # indexes will be added in the code
+        ],
+        condition=IfCondition(LaunchConfiguration('graph_mpc_two_robots_with_ori'))
     )
 
     return LaunchDescription([
@@ -113,9 +134,24 @@ def generate_launch_description():
             description='MPC on factor graph for a single robot.'
         ),
         DeclareLaunchArgument(
+            'graph_mpc_with_ori',
+            default_value='false',
+            description='MPC on factor graph for a single robot with load orientation.'
+        ),
+        DeclareLaunchArgument(
             'graph_mpc_two_robots',
             default_value='false',
             description='MPC on factor graph for 2 robots.'
+        ),
+        DeclareLaunchArgument(
+            'graph_mpc_two_robots_with_ori',
+            default_value='false',
+            description='MPC on factor graph for 2 robots with load orientation.'
+        ),
+        DeclareLaunchArgument(
+            'two_robots',
+            default_value='false',
+            description='Whether simulator has 2 robots or not (or has only one).'
         ),
 
         crazyflie_simulation,
@@ -123,6 +159,8 @@ def generate_launch_description():
         load_path_publisher,
         mpc_controller,
         mpcg_controller,
+        mpcg_with_angle_controller,
         mpcg_two_drones_controller,
+        mpcg_two_drones_with_angle_controller,
         rviz
         ])

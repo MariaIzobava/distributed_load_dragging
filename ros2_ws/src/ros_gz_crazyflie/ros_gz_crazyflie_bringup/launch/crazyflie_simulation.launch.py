@@ -64,7 +64,7 @@ def generate_launch_description():
             pkg_project_gazebo,
             'worlds',
             #'crazyflie_with_load_many_segments_world.sdf -r'
-            'crazyflie_with_load_world.sdf -r'
+            'crazyflie_with_load_in_the_middle_world.sdf -r'
         ])}.items()
     )
 

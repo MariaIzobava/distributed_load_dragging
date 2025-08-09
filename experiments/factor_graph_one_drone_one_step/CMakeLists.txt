@@ -8,7 +8,7 @@ include_directories(
 ${GTSAM_INCLUDE_DIR}
 )
 
-set(ROS2_INSTALL_DIR "/home/maryia/distributed_load_dragging/ros2_ws/install")
+set(ROS2_INSTALL_DIR "/home/maryia/legacy/ros2_ws/install")
 
 # Add the include directory for your library
 include_directories(${ROS2_INSTALL_DIR}/factor_graph_lib/include)

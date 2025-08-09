@@ -47,9 +47,7 @@ public:
         position_.resize(6);
         angles_.resize(3);
         load_position_.resize(6);
-        load_angles_.resize(3);
-        last_control_ << 0.0, 0.0;
-        last_tension_ << 0;
+        load_angles_.resize(4);
 
         is_pulling_ = false;
         desired_height_ = 0.5;
@@ -97,12 +95,53 @@ private:
     std::vector<double> load_angles_;
     nav_msgs::msg::Path::SharedPtr path_;
 
-    Vector2 last_control_;
-    Vector1 last_tension_;
-
     bool is_pulling_;
     double desired_height_;
     std::chrono::high_resolution_clock::time_point start_time_;
+
+    std::vector<double> get_next_velocity_() {
+
+        Vector4 initial_robot_state(
+            position_[0], position_[1],
+            position_[3], position_[4]
+        );
+        Vector6 initial_load_state(
+            load_position_[0], load_position_[1], load_angles_[2], 
+            load_position_[3], load_position_[4], load_angles_[3]
+        );
+
+        auto next_p = get_next_points();
+        Vector6 final_load_goal(
+            next_p[0], next_p[1], next_p[2],
+            0.0,        0.0,        0.0 // doesn't matter
+        );
+
+        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << ", " << initial_load_state[4] <<  ", " << initial_load_state[5] << std::endl;
+        cout << "Cur robot position: " << initial_robot_state[0] <<  ", " << initial_robot_state[1] << ", " << initial_robot_state[2] <<  ", " << initial_robot_state[3] <<  std::endl;
+        cout << "Cur robot height: " << position_[2] << std::endl;
+        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1] <<  ", " << final_load_goal[2] << std::endl;
+
+        auto executor = FactorExecutorFactory::create(0, initial_load_state, initial_robot_state, final_load_goal, position_[2]);
+        return executor->run();
+    }
+
+    std::vector<double> get_next_points() {
+        int num_p = 4000; // num_p is number of points
+        
+        // Get current time
+        auto cur_time = std::chrono::high_resolution_clock::now();
+        
+        // Calculate seconds from the beginning
+        auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
+
+        int i = (cur_millisec.count() / 100 + 10) % num_p;
+        cout << i << ' ' << path_->poses.size() << std::endl;
+        std::vector<double> ans;
+        ans.push_back(path_->poses[i].pose.position.x);
+        ans.push_back(path_->poses[i].pose.position.y);
+        ans.push_back(path_->poses[i].pose.orientation.x);
+        return ans; 
+    }
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -163,7 +202,8 @@ private:
 
         load_angles_[0] = roll;
         load_angles_[1] = pitch;
-        load_angles_[2] = yaw;
+        load_angles_[2] = yaw; //atan2(sin(yaw), cos(yaw));
+        load_angles_[3] = msg->twist.twist.angular.z;  // only save Yaw velocity
     }
 
     void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
@@ -199,84 +239,14 @@ private:
         new_cmd_msg.linear.z = error;
 
         auto next_velocity = get_next_velocity_();
-        last_control_ << next_velocity[2], next_velocity[3];
-        last_tension_ << next_velocity[4];
-
-        double K = 0.2;
-
-        double a = next_velocity[0];
-        double b = next_velocity[1];
-
-        if (a > b && a > K) {
-            b = K * b / a;
-            a = K;
-        } 
-        if (b > a && b > K) {
-            a = K * a / b;
-            b = K;
-        } 
-        if (a < b && a < -K) {
-            b = -K * b / a;
-            a = -K;
-        } 
-        if (b < a && b < -K) {
-            a = -K * a / b;
-            b = -K;
-        } 
-        
-        new_cmd_msg.linear.x = a; //max(min(next_velocity[0], K), -K);
-        new_cmd_msg.linear.y = b; //max(min(next_velocity[1], K), -K);
-        
 
         // Limiting velocities for safety
+        new_cmd_msg.linear.x = max(min(next_velocity[0], 0.2), -0.2);
+        new_cmd_msg.linear.y = max(min(next_velocity[1], 0.2), -0.2);
+        
         cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
-        cout << "Next control: " << last_control_[0] << ' ' << last_control_[1] << endl;
-        cout << "Next tension: " << last_tension_[0] << endl;
         
         twist_publisher_->publish(new_cmd_msg);
-    }
-
-    std::vector<double> get_next_velocity_() {
-
-        Vector4 initial_robot_state(
-            position_[0], position_[1],
-            position_[3], position_[4]
-        );
-        Vector4 initial_load_state(
-            load_position_[0], load_position_[1],
-            load_position_[3], load_position_[4]
-        );
-
-        auto next_p = get_next_points();
-        Vector4 final_load_goal(
-            next_p[0], next_p[1],
-            0.0,       0.0  // doesn't matter
-        );
-
-        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << std::endl;
-        cout << "Cur robot position: " << initial_robot_state[0] <<  ", " << initial_robot_state[1] << ", " << initial_robot_state[2] <<  ", " << initial_robot_state[3] <<  std::endl;
-        cout << "Cur robot height: " << position_[2] << std::endl;
-        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1] << std::endl;
-
-        auto executor = FactorExecutorFactory::create(0, initial_load_state, initial_robot_state, final_load_goal, position_[2], last_control_, last_tension_);
-        return executor->run();
-    }
-
-    std::vector<double> get_next_points() {
-        int num_p = 4000; // num_p is number of points
-        
-        // Get current time
-        auto cur_time = std::chrono::high_resolution_clock::now();
-        
-        // Calculate seconds from the beginning
-        auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
-
-        int i = (cur_millisec.count() / 100 + 10) % num_p;
-        cout << i << ' ' << path_->poses.size() << std::endl;
-        std::vector<double> ans;
-        ans.push_back(path_->poses[i].pose.position.x);
-        ans.push_back(path_->poses[i].pose.position.y);
-        return ans; 
     }
 };
 

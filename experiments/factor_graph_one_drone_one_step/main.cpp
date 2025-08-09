@@ -25,150 +25,128 @@
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/Vector.h>
 
-// My Factor Graph classes
+// // My Factor Graph classes
 #include "factor_graph_lib/cable_factors.hpp"
 #include "factor_graph_lib/control_factors.hpp"
 #include "factor_graph_lib/dynamics_factors.hpp"
+#include "factor_graph_lib/factor_executor.hpp"
 
 using namespace std;
 using namespace gtsam;
 
 using symbol_t = gtsam::Symbol;
 
+void FindAllValues(const Vector4& robot_state, const Vector6& load_state, const Vector6& load_goal) {
+    int num = 20;
+    double dt = 0.005;
+    double load_mass = 0.005;
+    double mu = 0.01;
+    double g = 9.81;
+    Vector6 diff = (load_goal - load_state) / num;
+    cout << diff << std::endl;
+    Vector2 prev_load_pos(2), prev_load_speed(2);
+    prev_load_pos << load_state(0), load_state(1);
+    prev_load_speed << load_state(3), load_state(4);
+    for (int k = 1; k <= num; k++) {
+        Vector2 cur_load_pos(2);
+        cur_load_pos << load_state(0) + k * diff(0),  load_state(1) + k * diff(1);
+        Vector2 cur_speed = (cur_load_pos - prev_load_pos) /dt;
+        Vector2 cur_a = (cur_speed - prev_load_speed) / dt;
+
+        double norm = prev_load_speed.norm();
+        Vector2 normed_prev_vel = prev_load_speed / norm;
+
+        cout << "normed_prev_vel " << normed_prev_vel << std::endl;
+        Vector2 cur_te(2); 
+        cur_te << cur_a(0) * load_mass + mu * g * load_mass * normed_prev_vel(0), cur_a(1) * load_mass + mu * g * load_mass * normed_prev_vel(1);
+        double t = cur_te.norm();
+
+
+        Vector2 e = cur_te / t;
+
+        cout << "T: " << t << "; E: " << e(0) << ' ' << e(1) << endl;
+        
+        prev_load_pos = cur_load_pos;
+        prev_load_speed = cur_speed;
+
+    }
+
+    prev_load_pos << load_state(0), load_state(1);
+    prev_load_speed << load_state(3), load_state(4);
+
+    Vector2 cur_load_pos(2);
+    cur_load_pos << load_state(0) + 20 * diff(0),  load_state(1) + 20 * diff(1);
+    
+    Vector2 cur_speed = (cur_load_pos - prev_load_pos) /dt;
+    Vector2 cur_a = (cur_speed - prev_load_speed) / dt;
+    cout << "cur load pos " << cur_a << std::endl;
+
+    double norm = prev_load_speed.norm();
+    Vector2 normed_prev_vel(2);
+
+    normed_prev_vel << -0.992497, 0.122265;
+    Vector2 cur_te(2); 
+    cur_te << cur_a(0) * load_mass + mu * g * load_mass * normed_prev_vel(0), cur_a(1) * load_mass + mu * g * load_mass * normed_prev_vel(1);
+    double t = cur_te.norm();
+
+
+    Vector2 e = cur_te / t;
+
+    cout << "T: " << t << "; E: " << e(0) << ' ' << e(1) << endl;
+
+}
+
 
 int main(int argc, char** argv) {
-    // --- 2. Create the Factor Graph ---
-    NonlinearFactorGraph graph;
 
-    // --- Define problem parameters ---
-    const int num_time_steps = 20; //20;
-    const double dt = 0.005;
-    const double robot_mass = 0.025; // kg
-    const double load_mass = 0.001; // 0.0001;   // kg
-    const double gravity = -9.81;
-    const double mu = 0.1;
-    const double cable_length = 1.0; // meters
-    const double cable_stiffness = 500.0; // N/m
-    const double cable_damping = 20.0;
+    bool WITH_ANGLE = false;
+    bool TWO_ROBOTS = false;
 
-    // --- Define weight Models ---
-    // Weights for the penalty factors. Adjust these to control the "softness" of the constraints.
-    // Higher weights mean stronger enforcement.
-    double weight_tension_lower_bound = 1000000.0; // High weight to strongly enforce T >= 0
-    double weight_cable_stretch = 1000000.0;     // Very high weight to strongly prevent cable from over-stretching
-    double weight_tension_slack = 50.0;       // Moderate weight to discourage tension when the cable should be slack
-
-    // These represent the uncertainty of each factor (1/covariance)
-    auto dynamics_cost = noiseModel::Diagonal::Sigmas(
-        (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
-    auto goal_cost = noiseModel::Diagonal::Sigmas(
-        (Vector(4) << 0.00005, 0.00005, 1000.1, 1000.1).finished());
-    auto init_cost = noiseModel::Diagonal::Sigmas(
-        (Vector(4) << 0.000005, 0.000005, 0.000005, 0.000005).finished());
-    auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
-    auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
-
-
-    // --- Add Factors to the Graph ---
-    Vector4 initial_load_state(0.0, 0.0, 0, 0);
-    Vector4 initial_robot_state(-1, 0, 0, 0);
-    graph.add(PriorFactor<Vector4>(symbol_t('x', 0), initial_robot_state, init_cost));
-    graph.add(PriorFactor<Vector4>(symbol_t('l', 0), initial_load_state, init_cost));
-
-    for (int k = 0; k < num_time_steps; ++k) {
-        graph.add(RobotDynamicsFactor(
-            symbol_t('x', k), 
-            symbol_t('l', k), 
-            symbol_t('u', k),
-            symbol_t('t', k),
-            symbol_t('x', k+1),
-            dt,
-            robot_mass,
-            dynamics_cost
-            ));
-
-        graph.add(LoadDynamicsFactor(
-            symbol_t('l', k),
-            symbol_t('x', k),
-            symbol_t('t', k),
-            symbol_t('l', k+1),
-            dt,
-            load_mass,
-            mu,
-            gravity,
-            dynamics_cost
-            ));
-
-        // Factor 1: Enforce T_k >= 0
-        graph.add(TensionLowerBoundFactor(symbol_t('t', k), weight_tension_lower_bound, tension_cost));
+    if (!WITH_ANGLE && !TWO_ROBOTS) {
         
-        // Factor 2: Penalize if ||p_r - p_l|| > cable_length
-        //graph.add(CableStretchPenaltyFactor(symbol_t('x', k), symbol_t('l', k), cable_length, weight_cable_stretch, tension_cost));
-        
-        // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
-        graph.add(TensionSlackPenaltyFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length, weight_tension_slack, tension_cost));
+        Vector4 initial_load_state(-0.721754, 0.122561, 0, 0);
+        Vector4 initial_robot_state(-1.61632, 0.494984, -0.000491759, 0.000247113);
+        Vector4 final_load_goal(-1.00181, 0.268997, 0, 0);
+        double robot_height = 0.503174;
+        Vector2 last_u(0.000870843, 0.00589633);
+        Vector1 last_t(0.000194949);
 
-        // Add a soft cost on control input to keep it constrained (prevents wild solutions)
-        graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), 3, control_cost));
-        graph.add(MagnitudeLowerBoundFactor(symbol_t('u', k), 0.003, control_cost));
-    }
+        auto executor = FactorExecutorFactory::create(1, initial_load_state, initial_robot_state, final_load_goal, robot_height, last_u, last_t);
+        auto reult = executor->run();
 
-    // Add a goal cost on the final load state
-    Vector4 final_load_goal(-0.01, 0.001, -0.05, 0.01); // Goal: move to (10, 5)
-    graph.add(PriorFactor<Vector4>(symbol_t('l', num_time_steps), final_load_goal, goal_cost));
+    } else if (WITH_ANGLE && !TWO_ROBOTS){
 
+        Vector6 initial_load_state(0.149135, 0.0409068, -0.0269265, 0, 0, 0);
+        Vector4 initial_robot_state(-0.920369, 0.00136737, -0.00229409, 0.000568685);
+        Vector6 final_load_goal(-0.0219907, 0.000120901, -0.0109956, 0, 0, 0);
+        double robot_height = 0.493962;
 
-    cout << "Factor Graph built." << endl;
-    graph.print("Factor Graph:\n");
+        auto executor = FactorExecutorFactory::create(1, initial_load_state, initial_robot_state, final_load_goal, robot_height);
+        auto reult = executor->run();
 
+    } else if (TWO_ROBOTS && !WITH_ANGLE) {
 
-    // --- 3. Create Initial Estimate ---
-    // The optimizer needs an initial guess for all variables.
-    Values initial_values;
-    Vector2 init_u(0.0, 0.0);
-    Vector1 init_t(0.0);
-    for (int k = 0; k <= num_time_steps; ++k) {
-        // A simple initial guess: stay at the start position.
-        initial_values.insert(symbol_t('x', k), initial_robot_state);
-        initial_values.insert(symbol_t('l', k), initial_load_state);
-        // Initial guess for controls is zero.
-        if (k < num_time_steps) {
-            initial_values.insert(symbol_t('u', k), init_u);
-            initial_values.insert(symbol_t('t', k), init_t);
-        }
-    }
+        Vector4 initial_load_state(0.147999, 0.377569, 0.0132869, 0.0711125);
+        Vector4 initial_robot1_state( -1.08944, -0.172567, 0.00471183, -0.00134805);
+        Vector4 initial_robot2_state(-0.646896, 1.40409, -0.0689179, 0.0239214);
+        Vector4 final_load_goal(-1, 0.267949, 0, 0);
+        double robot_height1 =  0.446799;
+        double robot_height2 =  0.397307;
 
-    cout << "\nInitial values created." << endl;
-    initial_values.print("Initial Values:\n");
+        auto executor = FactorExecutorFactory::create(1, initial_load_state, initial_robot1_state, initial_robot2_state, final_load_goal, robot_height1, robot_height2);
+        auto reult = executor->run();
 
-    // // --- 4. Optimize ---
-    LevenbergMarquardtParams params;
-    params.setMaxIterations(1000);
-    params.setVerbosity("TERMINATION"); // Print info at the end
-    LevenbergMarquardtOptimizer optimizer(graph, initial_values, params);
+    } else {
 
-    cout << "\nOptimizing..." << endl;
-    Values result = optimizer.optimize();
-    cout << "Optimization complete." << endl;
-    cout << "Initial Error: " << graph.error(initial_values) << endl;
-    cout << "Final Error: " << graph.error(result) << endl;
-    cout << "Opt error: " << optimizer.error() << endl;
+        Vector6 initial_load_state(0.150256, 0.0502197, 0.00282714, 0, 0, 0);
+        Vector4 initial_robot1_state(-0.949938, 0.00168648, -0.00929439, 0.00128902);
+        Vector4 initial_robot2_state(0.201326, 1.14887, -0.00175323, -0.0184762);
+        Vector6 final_load_goal(-1.22465e-16, 0, 0, 0, 0, 0);
+        double robot_height1 = 0.500701;
+        double robot_height2 =0.50312;
 
-
-    // --- 5. Print Results ---
-    cout << "\nOptimized Trajectory:" << endl;
-    for (int k = 0; k <= num_time_steps; ++k) {
-        Vector4 robot_state = result.at<Vector4>(symbol_t('x', k));
-        Vector4 load_state = result.at<Vector4>(symbol_t('l', k));
-        cout << "--- Time Step " << k << " ---" << endl;
-        cout << "  Robot Pos: (" << robot_state[0] << ", " << robot_state[1] << ", " << robot_state[2] << ", " << robot_state[3] << ")" << endl;
-        cout << "  Load  Pos: (" << load_state[0]  << ", " << load_state[1] << ", " << load_state[2] << ", " << load_state[3] << ")" << endl;
-        if (k < num_time_steps) {
-            Vector2 control = result.at<Vector2>(symbol_t('u', k));
-            cout << "  Control:   (" << control[0] << ", " << control[1] << ")" << endl;
-            Vector1 tension = result.at<Vector1>(symbol_t('t', k));
-            cout << "  Tension:   (" << tension[0] << ")" << endl;
-        }
+        auto executor = FactorExecutorFactory::create(1, initial_load_state, initial_robot1_state, initial_robot2_state, final_load_goal, robot_height1, robot_height2);
+        auto reult = executor->run();
     }
 
     return 0;

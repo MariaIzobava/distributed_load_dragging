@@ -19,60 +19,46 @@ using namespace std;
 using namespace gtsam;
 
 
-class VelocityLowerBound: public NoiseModelFactor1<Vector4> {
+class RobotsDistanceFactor: public NoiseModelFactor2<Vector4, Vector4> {
     double limit_;
 
-public:
-    VelocityLowerBound(Key key_xr_k, double limit, const SharedNoiseModel& model) :
-        NoiseModelFactor1<Vector4>(model, key_xr_k), limit_(limit) {}
-
-    Vector evaluateError(const Vector4& xr_k,
-                         gtsam::OptionalMatrixType H1) const override {
-
-        Vector4 err(0, 0, min(0.0, xr_k[2] - limit_), min(0.0, xr_k[3] - limit_));
-
-        if (H1) {
-            int k1 = (xr_k[2] < limit_) ? 1 : 0;
-            int k2 = (xr_k[3] < limit_) ? 1 : 0;
-            *H1 = (gtsam::Matrix(4, 4) << 
-                0, 0, 0, 0,
-                0, 0, 0, 0,
-                0, 0, k1, 0,
-                0, 0, 0, k2
-            ).finished();
-        }
-
-        return err;
+    double smooth_max_zero_(double x, double epsilon) const {
+        return 0.5 * (x + std::sqrt(x*x + epsilon*epsilon));
     }
-};
-
-
-class VelocityUpperBound: public NoiseModelFactor1<Vector4> {
-    double limit_;
 
 public:
-    VelocityUpperBound(Key key_xr_k, double limit, const SharedNoiseModel& model) :
-        NoiseModelFactor1<Vector4>(model, key_xr_k), limit_(limit) {}
+    RobotsDistanceFactor(Key key_xr1_k, Key key_xr2_k, double limit, const SharedNoiseModel& model) :
+        NoiseModelFactor2<Vector4, Vector4>(model, key_xr1_k, key_xr2_k), limit_(limit) {}
 
-    Vector evaluateError(const Vector4& xr_k,
-                         gtsam::OptionalMatrixType H1) const override {
+    Vector evaluateError(const Vector4& xr1_k, const Vector4& xr2_k,
+                        gtsam::OptionalMatrixType H1,
+                        gtsam::OptionalMatrixType H2) const override {
     
-        Vector4 err(0, 0, max(0.0, xr_k[2] - limit_), max(0.0, xr_k[3] - limit_));
+        Vector2 diff(xr1_k[0] - xr2_k[0], xr1_k[1] - xr2_k[1]);
+        double dist = diff.norm();
+
+        double epsilon = 1e-9;
+        double err = smooth_max_zero_(limit_ - dist, epsilon);
+
+        double inner_term = limit_ - dist;
+        double deriv_smooth_max_wrt_inner = 0.5 * (1.0 + inner_term / std::sqrt(inner_term*inner_term + epsilon*epsilon));
+        Vector2 partial_deriv_distance_r1 = -diff / dist; 
+        Vector2 partial_deriv_distance_r2 = diff / dist; 
 
         if (H1) {
-            int k1 = (xr_k[2] > limit_) ? 1 : 0;
-            int k2 = (xr_k[3] > limit_) ? 1 : 0;
-            *H1 = (gtsam::Matrix(4, 4) << 
-                0, 0, 0, 0,
-                0, 0, 0, 0,
-                0, 0, k1, 0,
-                0, 0, 0, k2
+            *H1 = (gtsam::Matrix(1, 4) << deriv_smooth_max_wrt_inner * partial_deriv_distance_r1(0), deriv_smooth_max_wrt_inner * partial_deriv_distance_r1(1), 0, 0
             ).finished();
         }
 
-        return err;
+        if (H2) {
+            *H2 = (gtsam::Matrix(1, 4) << deriv_smooth_max_wrt_inner * partial_deriv_distance_r2(0), deriv_smooth_max_wrt_inner * partial_deriv_distance_r2(1), 0, 0
+            ).finished();
+        }
+
+        return (Vector(1) << err).finished();
     }
 };
+
 
 /**
  * Custom factor to model the robot's dynamics.
@@ -84,12 +70,16 @@ class RobotDynamicsFactor: public NoiseModelFactor5<Vector4, Vector4, Vector2, V
     double robot_mass_;
 
 public:
-    RobotDynamicsFactor(Key key_xr_k, Key key_xl_k, Key key_u_k, Key key_tension_k, Key key_xr_k_plus_1,
-                        double dt, double robot_mass, const SharedNoiseModel& model) :
+    RobotDynamicsFactor(
+        Key key_xr_k, 
+        Key key_xl_k, 
+        Key key_u_k, 
+        Key key_tension_k, 
+        Key key_xr_k_plus_1,
+        double dt, double robot_mass, const SharedNoiseModel& model) :
         NoiseModelFactor5<Vector4, Vector4, Vector2, Vector1, Vector4>(model, key_xr_k, key_xl_k, key_u_k, key_tension_k, key_xr_k_plus_1),
         dt_(dt), robot_mass_(robot_mass) {}
 
-    // The evaluateError function, which implements the factor's error calculation.
     Vector evaluateError(const Vector4& xr_k,
                          const Vector4& xl_k,
                          const Vector2& u_k, 
@@ -101,7 +91,6 @@ public:
                          gtsam::OptionalMatrixType H4,
                          gtsam::OptionalMatrixType H5) const override {
     
-        // Unpack state: xr = [px, py, vx, vy]
         Vector2 pos_k = xr_k.head<2>();
         Vector2 vel_k = xr_k.tail<2>();
 
@@ -116,7 +105,6 @@ public:
         double A_CNST =  dt_ * tension_k(0) / robot_mass_;
 
         if (H1) {
-            // H1 is a valid reference to a matrix, so you can assign to it.
             *H1 = (gtsam::Matrix(4, 4) << 
                 -1,  0, -dt_, 0,
                 0, -1,  0,  -dt_,
@@ -130,9 +118,7 @@ public:
                 0, 0, 0, 0,
                 A_CNST * h.ex_dxl,  A_CNST * h.ex_dyl, 0,   0,
                 A_CNST * h.ey_dxl,  A_CNST * h.ey_dyl,  0,  0).finished();
-
         }
-
         if (H3) {
             *H3 = (gtsam::Matrix(4, 2) << 
                 0, 0, 
@@ -163,8 +149,12 @@ class LoadDynamicsFactor: public NoiseModelFactor4<Vector4, Vector4, Vector1, Ve
     double g_;
 
 public:
-    LoadDynamicsFactor(Key key_xl_k, Key key_xr_k, Key key_tension_k, Key key_xl_k_plus_1,
-                        double dt, double load_mass, double mu, double g, const SharedNoiseModel& model) :
+    LoadDynamicsFactor(
+        Key key_xl_k, 
+        Key key_xr_k, 
+        Key key_tension_k, 
+        Key key_xl_k_plus_1,
+        double dt, double load_mass, double mu, double g, const SharedNoiseModel& model) :
         NoiseModelFactor4<Vector4, Vector4, Vector1, Vector4>(model, key_xl_k, key_xr_k, key_tension_k, key_xl_k_plus_1),
         dt_(dt), load_mass_(load_mass), mu_(mu), g_(g) {}
 
@@ -240,8 +230,14 @@ class LoadDynamicsTwoRobotsFactor: public NoiseModelFactor6<Vector4, Vector4, Ve
     double g_;
 
 public:
-    LoadDynamicsTwoRobotsFactor(Key key_xl_k, Key key_xr1_k, Key key_tension1_k, Key key_xr2_k, Key key_tension2_k, Key key_xl_k_plus_1,
-                        double dt, double load_mass, double mu, double g, const SharedNoiseModel& model) :
+    LoadDynamicsTwoRobotsFactor(
+        Key key_xl_k, 
+        Key key_xr1_k, 
+        Key key_tension1_k, 
+        Key key_xr2_k, 
+        Key key_tension2_k, 
+        Key key_xl_k_plus_1,
+        double dt, double load_mass, double mu, double g, const SharedNoiseModel& model) :
         NoiseModelFactor6<Vector4, Vector4, Vector1, Vector4, Vector1, Vector4>(model, key_xl_k, key_xr1_k, key_tension1_k, key_xr2_k, key_tension2_k, key_xl_k_plus_1),
         dt_(dt), load_mass_(load_mass), mu_(mu), g_(g) {}
 
@@ -252,7 +248,6 @@ public:
                          const Vector1& tension2_k,
                          const Vector4& xl_k_plus_1) const {
 
-        // Unpack state: xr = [px, py, vx, vy]
         Vector2 pos_k = xl_k.head<2>();
         Vector2 vel_k = xl_k.tail<2>();
         double v_norm = vel_k.norm();
@@ -267,9 +262,6 @@ public:
             NINE = -1.0 * vel_k(0) * vel_k(1) / (v_norm * v_norm * v_norm);
         }
 
-        // Simple Euler integration for dynamics
-        // next_pos = current_pos + dt * current_vel
-        // next_vel = current_vel + dt * (control_force/mass - tension_force/mass)
         Vector2 next_pos = pos_k + vel_k * dt_;
 
         double xd1 = xr1_k(0) - xl_k(0);
@@ -311,7 +303,6 @@ public:
                          gtsam::OptionalMatrixType H5,
                          gtsam::OptionalMatrixType H6) const override {
 
-        // Unpack state: xr = [px, py, vx, vy]
         Vector2 pos_k = xl_k.head<2>();
         Vector2 vel_k = xl_k.tail<2>();
         double v_norm = vel_k.norm();
@@ -326,9 +317,6 @@ public:
             NINE = -1.0 * vel_k(0) * vel_k(1) / (v_norm * v_norm * v_norm);
         }
 
-        // Simple Euler integration for dynamics
-        // next_pos = current_pos + dt * current_vel
-        // next_vel = current_vel + dt * (control_force/mass - tension_force/mass)
         Vector2 next_pos = pos_k + vel_k * dt_;
 
         double xd1 = xr1_k(0) - xl_k(0);
@@ -367,89 +355,39 @@ public:
         double SIX2 = -1.0 / norm2 + yd2 * yd2 / (norm2 * norm2 * norm2);
 
         if (H1) {
-            // *H1 = (gtsam::Matrix(4, 4) << 
-            //     -1,  0, -dt_, 0,
-            //     0, -1,  0,  -dt_,
-            //     -dt_ * (tension1_k(0) * TWO + tension2_k(0) * TWO2) / load_mass_,  -dt_ * (tension1_k(0) * FOUR + tension2_k(0) * FOUR2) / load_mass_, -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
-            //     -dt_ * (tension1_k(0) * FOUR + tension2_k(0) * FOUR2) / load_mass_,  -dt_ * (tension1_k(0) * SIX + tension2_k(0) * SIX2) / load_mass_,  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
-            *H1 = numericalDerivative61<Vector,Vector4, Vector4, Vector1, Vector4, Vector1, Vector4 > (
-                    [this](const Vector4& a, 
-                            const Vector4& b,
-                            const Vector1& c,
-                            const Vector4& d,
-                            const Vector1& e,
-                            const Vector4& f) {
-                                return this->evaluateErrorOnly(a, b, c, d, e, f);
-                            }, xl_k, xr1_k, tension1_k, xr2_k, tension2_k, xl_k_plus_1, 1e-5
-                );
+            *H1 = (gtsam::Matrix(4, 4) << 
+                -1,  0, -dt_, 0,
+                0, -1,  0,  -dt_,
+                -dt_ * (tension1_k(0) * TWO + tension2_k(0) * TWO2) / load_mass_,  -dt_ * (tension1_k(0) * FOUR + tension2_k(0) * FOUR2) / load_mass_, -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
+                -dt_ * (tension1_k(0) * FOUR + tension2_k(0) * FOUR2) / load_mass_,  -dt_ * (tension1_k(0) * SIX + tension2_k(0) * SIX2) / load_mass_,  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
         }
         if (H2) {
-            // *H2 = (gtsam::Matrix(4, 4) << 
-            //     0,  0, 0, 0,
-            //     0, 0,  0,  0,
-            //     -dt_ * tension1_k(0) * ONE / load_mass_,  -dt_ * tension1_k(0) * THREE / load_mass_, 0, 0,
-            //     -dt_ * tension1_k(0) * THREE / load_mass_,  -dt_ * tension1_k(0) * FIVE / load_mass_, 0, 0).finished();
-            *H2 = numericalDerivative62<Vector,Vector4, Vector4, Vector1, Vector4, Vector1, Vector4 > (
-                [this](const Vector4& a, 
-                        const Vector4& b,
-                        const Vector1& c,
-                        const Vector4& d,
-                        const Vector1& e,
-                        const Vector4& f) {
-                            return this->evaluateErrorOnly(a, b, c, d, e, f);
-                        }, xl_k, xr1_k, tension1_k, xr2_k, tension2_k, xl_k_plus_1, 1e-5
-            );
+            *H2 = (gtsam::Matrix(4, 4) << 
+                0,  0, 0, 0,
+                0, 0,  0,  0,
+                -dt_ * tension1_k(0) * ONE / load_mass_,  -dt_ * tension1_k(0) * THREE / load_mass_, 0, 0,
+                -dt_ * tension1_k(0) * THREE / load_mass_,  -dt_ * tension1_k(0) * FIVE / load_mass_, 0, 0).finished();
         }
         if (H3) {
-            // *H3 = (gtsam::Matrix(4, 1) << 
-            //     0,
-            //     0,
-            //     -(dt_ * xd1 / (load_mass_ * norm1)),
-            //     -(dt_ * yd1 / (load_mass_ * norm1))).finished();
-            *H3 = numericalDerivative63<Vector,Vector4, Vector4, Vector1, Vector4, Vector1, Vector4 > (
-                [this](const Vector4& a, 
-                        const Vector4& b,
-                        const Vector1& c,
-                        const Vector4& d,
-                        const Vector1& e,
-                        const Vector4& f) {
-                            return this->evaluateErrorOnly(a, b, c, d, e, f);
-                        }, xl_k, xr1_k, tension1_k, xr2_k, tension2_k, xl_k_plus_1, 1e-5
-            );
+            *H3 = (gtsam::Matrix(4, 1) << 
+                0,
+                0,
+                -(dt_ * xd1 / (load_mass_ * norm1)),
+                -(dt_ * yd1 / (load_mass_ * norm1))).finished();
         }
         if (H4) {
-            // *H4 = (gtsam::Matrix(4, 4) << 
-            //     0,  0, 0, 0,
-            //     0, 0,  0,  0,
-            //     -dt_ * tension2_k(0) * ONE2 / load_mass_,  -dt_ * tension2_k(0) * THREE2 / load_mass_, 0, 0,
-            //     -dt_ * tension2_k(0) * THREE2 / load_mass_,  -dt_ * tension2_k(0) * FIVE2 / load_mass_, 0, 0).finished();
-            *H4 = numericalDerivative64<Vector,Vector4, Vector4, Vector1, Vector4, Vector1, Vector4 > (
-                [this](const Vector4& a, 
-                        const Vector4& b,
-                        const Vector1& c,
-                        const Vector4& d,
-                        const Vector1& e,
-                        const Vector4& f) {
-                            return this->evaluateErrorOnly(a, b, c, d, e, f);
-                        }, xl_k, xr1_k, tension1_k, xr2_k, tension2_k, xl_k_plus_1, 1e-5
-            );
+            *H4 = (gtsam::Matrix(4, 4) << 
+                0,  0, 0, 0,
+                0, 0,  0,  0,
+                -dt_ * tension2_k(0) * ONE2 / load_mass_,  -dt_ * tension2_k(0) * THREE2 / load_mass_, 0, 0,
+                -dt_ * tension2_k(0) * THREE2 / load_mass_,  -dt_ * tension2_k(0) * FIVE2 / load_mass_, 0, 0).finished();
         }
         if (H5) {
-            // *H5 = (gtsam::Matrix(4, 1) << 
-            //     0,
-            //     0,
-            //     -(dt_ * xd2 / (load_mass_ * norm2)),
-            //     -(dt_ * yd2 / (load_mass_ * norm2))).finished();
-            *H5 = numericalDerivative65<Vector,Vector4, Vector4, Vector1, Vector4, Vector1, Vector4 > (
-                [this](const Vector4& a, 
-                        const Vector4& b,
-                        const Vector1& c,
-                        const Vector4& d,
-                        const Vector1& e,
-                        const Vector4& f) {
-                            return this->evaluateErrorOnly(a, b, c, d, e, f);
-                        }, xl_k, xr1_k, tension1_k, xr2_k, tension2_k, xl_k_plus_1, 1e-5
-            );
+            *H5 = (gtsam::Matrix(4, 1) << 
+                0,
+                0,
+                -(dt_ * xd2 / (load_mass_ * norm2)),
+                -(dt_ * yd2 / (load_mass_ * norm2))).finished();
         }
         if (H6) {
             *H6 = gtsam::Matrix4::Identity();

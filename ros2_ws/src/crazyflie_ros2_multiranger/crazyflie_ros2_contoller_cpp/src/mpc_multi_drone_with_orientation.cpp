@@ -1,0 +1,279 @@
+#include "rclcpp/rclcpp.hpp"
+
+#include <gtsam/slam/PriorFactor.h>
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/base/Matrix.h>
+#include <gtsam/base/Vector.h>
+#include <Eigen/Geometry>
+
+#include "std_msgs/msg/bool.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Matrix3x3.h"
+
+// My classes
+#include "crazyflie_ros2_controller_cpp/base_mpc.hpp"
+#include "factor_graph_lib/factor_executor_factory.hpp"
+
+#include <vector>
+#include <string> 
+#include <chrono>
+#include <fstream>
+#include <nlohmann/json.hpp>
+
+using namespace std;
+using namespace gtsam;
+using symbol_t = gtsam::Symbol;
+using json = nlohmann::json;
+
+
+class GtsamCppTestNode : public BaseMpc
+{
+public:
+    GtsamCppTestNode() : 
+    BaseMpc(
+        "/home/maryia/legacy/experiments/metrics/four_drones_with_ori.csv", 
+        4, 
+        true, 
+        false, 
+        "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/four_drones_with_ori_points.json",
+        "gtsam_cpp_test_node")
+    {
+        RCLCPP_INFO(this->get_logger(), "MPC for multiple robots with orientation with GTSAM node has started.");
+
+        this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
+        this->declare_parameter<int>("robot_num", 4);
+
+        std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
+        robot_num_ = this->get_parameter("robot_num").as_int();
+
+        position_.resize(robot_num_);
+        angles_.resize(robot_num_);
+        rot_.resize(robot_num_);
+
+        for (int i = 0; i < robot_num_; i++) {
+            position_[i].resize(6);
+            angles_[i].resize(6);
+        }
+        load_position_.resize(6);
+        load_angles_.resize(6);
+
+        is_pulling_ = 0;
+        desired_height_ = 0.5;
+
+        path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
+          "/desired_path",
+          10, // QoS history depth
+          std::bind(&GtsamCppTestNode::path_subscribe_callback, this, std::placeholders::_1));
+
+        for (int i = 0; i < robot_num_; i++) {
+            string suffix = "_0" + to_string(i+1) + "/odom";
+            odom_subscription_.push_back(this->create_subscription<nav_msgs::msg::Odometry>(
+            robot_prefix_ + suffix,
+            10, // QoS history depth
+            [this, i](const nav_msgs::msg::Odometry::SharedPtr msg) {
+                // Inside the lambda, call the member function with both arguments
+                this->robot_odom_subscribe_callback(msg, i);
+            }));
+        }
+
+        load_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
+          "load/odom",
+          10, // QoS history depth
+          std::bind(&GtsamCppTestNode::load_odom_subscribe_callback, this, std::placeholders::_1));
+
+        land_ = this->create_subscription<std_msgs::msg::Bool>(
+          "land",
+          10, // QoS history depth
+          std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
+
+        for (int i = 0; i < robot_num_; i++) {
+            string topic_name = "/cmd_vel_0" + to_string(i+1);
+            twist_publisher_.push_back(this->create_publisher<geometry_msgs::msg::Twist>(topic_name, 10));
+        }
+        timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
+        std::bind(&GtsamCppTestNode::timer_callback, this));
+    }
+
+private:
+    std::vector<rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> twist_publisher_;
+    rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
+    std::vector<rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr> odom_subscription_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
+    rclcpp::TimerBase::SharedPtr timer_;
+
+    std::vector<std::vector<double> > position_;
+    std::vector<std::vector<double> > angles_;
+    std::vector<double> load_position_;
+    std::vector<double> load_angles_;
+    std::vector<Eigen::Matrix3d> rot_;
+    Eigen::Matrix3d rotl_;
+    nav_msgs::msg::Path::SharedPtr path_;
+
+    int is_pulling_, robot_num_;
+    double desired_height_;
+    std::chrono::high_resolution_clock::time_point start_time_;
+
+    void land_subscribe_callback(const std_msgs::msg::Bool msg)
+    {
+        cout << "Factor Graph MPC: LANDING" << std::endl;
+        timer_->cancel();
+        geometry_msgs::msg::Twist new_cmd_msg;
+        new_cmd_msg.linear.z = -0.2;
+            
+        for (int i = 0; i < robot_num_; i++) {
+            twist_publisher_[i]->publish(new_cmd_msg);
+        }
+        return; 
+    }
+
+    void robot_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg, int k)
+    {
+        odom_(msg, position_[k], angles_[k], rot_[k]);
+    }
+
+    void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
+    {
+        odom_(msg, load_position_, load_angles_, rotl_);
+    }
+
+    void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
+    {
+        path_ = msg;
+    }
+    
+    void timer_callback()
+    {
+
+        // If not flying --> takeoff
+        if (is_pulling_ != (1 << robot_num_) - 1) {
+            for (int i = 0; i < robot_num_; i++) {
+                geometry_msgs::msg::Twist new_cmd_msg;
+                new_cmd_msg.linear.z = 0.1;
+
+                if (position_[i][2] > desired_height_) {
+                    new_cmd_msg.linear.z = 0.0;
+                    is_pulling_ |= (1 << i);
+                }
+
+                twist_publisher_[i]->publish(new_cmd_msg);
+            }
+            if (is_pulling_ == (1 << robot_num_) - 1) {
+                start_time_ = std::chrono::high_resolution_clock::now();
+                RCLCPP_INFO(this->get_logger(), "Takeoff completed");
+            }
+            return;
+        }
+
+        if (path_ == NULL) {
+            return;
+        }
+
+        // Now the drone is in "pulling" mode, control with MPC
+        auto next_velocity = get_next_velocity_();
+        std::vector<double> tensions;
+        std::vector<int> ap_directions;
+        for (int i = 0; i < robot_num_; i++) {
+            tensions.push_back(next_velocity[robot_num_ * 2 + i]);
+            ap_directions.push_back(1);
+        }
+        record_metrics(load_position_, position_, tensions, ap_directions);
+
+        for (int i = 0; i < robot_num_; i++) {
+            geometry_msgs::msg::Twist new_cmd_msg;
+
+            Eigen::Vector3d v_local;
+            v_local << next_velocity[2*i], next_velocity[2*i+1], desired_height_ - position_[i][2]; 
+            Eigen::Vector3d v_world = rot_[i].transpose() * v_local;
+
+            new_cmd_msg.linear.x = max(min(v_world(0), 0.2), -0.2);
+            new_cmd_msg.linear.y = max(min(v_world(1), 0.2), -0.2);
+            new_cmd_msg.linear.z = max(min(v_world(2), 0.2), -0.2);
+
+            cout << "Next velocity (world) drone " << i+1 << ": " << next_velocity[2*i] << ' ' << next_velocity[2*i+1] << endl;
+            cout << "Next velocity (local) drone " << i+1 << ": " <<  new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
+            twist_publisher_[i]->publish(new_cmd_msg);
+        }
+    }
+
+    std::vector<double> get_next_velocity_() {
+        std::vector<Vector4> initial_robot_states_;
+        std::vector<double> heights;
+        for (int i = 0; i < robot_num_; i++) {
+            Vector4 state(
+                position_[i][0], position_[i][1],
+                position_[i][3], position_[i][4]
+            );
+            initial_robot_states_.push_back(state);
+            heights.push_back(position_[i][2]);
+        }
+        Vector6 initial_load_state(
+            load_position_[0], load_position_[1], load_angles_[2], 
+            load_position_[3], load_position_[4], load_angles_[3]
+        );
+
+        auto next_p = get_next_points();
+        Vector6 final_load_goal(
+            next_p[0], next_p[1], next_p[2],
+            0,          0,         0 // doesn't matter
+        );
+
+        // record_datapoint(
+        //     {
+        //         {"init_load", initial_load_state},
+        //         {"init_robot1", initial_robot1_state},
+        //         {"init_robot2", initial_robot2_state},
+        //         {"goal_load", final_load_goal},
+        //         {"height1" , position1_[2]},
+        //         {"height2" , position2_[2]},
+        //     }
+        // );
+
+        cout << "\n===================" << std::endl;
+        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << ", " << initial_load_state[4] <<  ", " << initial_load_state[5] << std::endl;
+        for (int i = 0; i < robot_num_; i++) {
+            cout << "Cur robot " << i + 1 << " position: " << initial_robot_states_[i][0] <<  ", " << initial_robot_states_[i][1] << ", " << initial_robot_states_[i][2] <<  ", " << initial_robot_states_[i][3] <<  std::endl;
+            cout << "Height: " << heights[i] << endl;    
+        }
+        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1]<<  ", " << final_load_goal[2] << std::endl;
+
+        auto executor = FactorExecutorFactory::create("sim", robot_num_, initial_load_state, initial_robot_states_, final_load_goal, heights, {}, {});
+        map<string, double> factor_errors = {};
+        double pos_error = 0.0;
+        return executor->run(factor_errors, pos_error);
+    }
+
+    std::vector<double> get_next_points() {
+        int num_p = 4000; // num_p is number of points
+        
+        // Get current time
+        auto cur_time = std::chrono::high_resolution_clock::now();
+        
+        // Calculate seconds from the beginning
+        auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
+
+        int i = (cur_millisec.count() / 100) % num_p;
+        cout << i << ' ' << path_->poses.size() << std::endl;
+        std::vector<double> ans;
+        ans.push_back(path_->poses[i].pose.position.x);
+        ans.push_back(path_->poses[i].pose.position.y);
+        ans.push_back(atan2(sin(path_->poses[i].pose.orientation.x), cos(path_->poses[i].pose.orientation.x)) );
+        return ans; 
+    }
+};
+
+int main(int argc, char *argv[])
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<GtsamCppTestNode>());
+    rclcpp::shutdown();
+    return 0;
+}

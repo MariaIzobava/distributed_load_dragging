@@ -8,37 +8,45 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/Vector.h>
+#include <Eigen/Geometry>
 
 #include "std_msgs/msg/bool.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "nav_msgs/msg/odometry.hpp"
-#include "geometry_msgs/msg/quaternion.hpp" // For the Quaternion message type
-
-// For quaternion to Euler conversion
+#include "geometry_msgs/msg/quaternion.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 
-// My Factor Graph classes
-#include "factor_graph_lib/factor_executor.hpp"
+// My classes
+#include "crazyflie_ros2_controller_cpp/base_mpc.hpp"
+#include "factor_graph_lib/common.hpp"
+#include "factor_graph_lib/factor_executor_factory.hpp"
 
 #include <vector>
 #include <string> 
 #include <chrono>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
-// Use gtsam namespace
 using namespace std;
 using namespace gtsam;
-
-// Define symbols for different variable types for clarity
 using symbol_t = gtsam::Symbol;
+using json = nlohmann::json;
 
 
-class GtsamCppTestNode : public rclcpp::Node
+class GtsamCppTestNode : public BaseMpc
 {
 public:
-    GtsamCppTestNode() : Node("gtsam_cpp_test_node")
+    GtsamCppTestNode() : 
+    BaseMpc(
+        "/home/maryia/legacy/experiments/metrics/two_drones_with_ori.csv", 
+        2, 
+        true, 
+        false, 
+        "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/two_drones_with_ori_points.json",
+        "gtsam_cpp_test_node")
     {
-        RCLCPP_INFO(this->get_logger(), "MPC with GTSAM node has started.");
+        RCLCPP_INFO(this->get_logger(), "MPC for 2 drones with load orientation with GTSAM node has started.");
 
         this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
 
@@ -88,19 +96,17 @@ public:
 
 private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher1_, twist_publisher2_;
-
-    // Subscribers
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription1_, odom_subscription2_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
-
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::vector<double> position1_, position2_;
     std::vector<double> angles1_, angles2_;
     std::vector<double> load_position_;
     std::vector<double> load_angles_;
+    Eigen::Matrix3d rot1_, rot2_, rotl_;
     nav_msgs::msg::Path::SharedPtr path_;
 
     int is_pulling_;
@@ -119,109 +125,19 @@ private:
         return; 
     }
 
-    void odom_(const nav_msgs::msg::Odometry::SharedPtr msg, std::vector<double>& position, std::vector<double>& angles) {
-        position[0] = msg->pose.pose.position.x;
-        position[1] = msg->pose.pose.position.y;
-        position[2] = msg->pose.pose.position.z;
-        position[3] = msg->twist.twist.linear.x;
-        position[4] = msg->twist.twist.linear.y;
-        position[5] = msg->twist.twist.linear.z;
-
-        // Quaternion to Euler conversion
-        tf2::Quaternion q(
-          msg->pose.pose.orientation.x,
-          msg->pose.pose.orientation.y,
-          msg->pose.pose.orientation.z,
-          msg->pose.pose.orientation.w);
-
-        tf2::Matrix3x3 m(q);
-        double roll, pitch, yaw;
-        m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
-
-        angles[0] = roll;
-        angles[1] = pitch;
-        angles[2] = atan2(sin(yaw), cos(yaw));
-        angles[3] = msg->twist.twist.angular.z;  // only save Yaw velocity
-    }
-
-    // Callback functions
     void odom1_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
-        odom_(msg, position1_, angles1_);
-        // position1_[0] = msg->pose.pose.position.x;
-        // position1_[1] = msg->pose.pose.position.y;
-        // position1_[2] = msg->pose.pose.position.z;
-        // position1_[3] = msg->twist.twist.linear.x;
-        // position1_[4] = msg->twist.twist.linear.y;
-        // position1_[5] = msg->twist.twist.linear.z;
-
-        // // Quaternion to Euler conversion
-        // tf2::Quaternion q(
-        //   msg->pose.pose.orientation.x,
-        //   msg->pose.pose.orientation.y,
-        //   msg->pose.pose.orientation.z,
-        //   msg->pose.pose.orientation.w);
-
-        // tf2::Matrix3x3 m(q);
-        // double roll, pitch, yaw;
-        // m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
-
-        // angles1_[0] = roll;
-        // angles1_[1] = pitch;
-        // angles1_[2] = yaw;
+        odom_(msg, position1_, angles1_, rot1_);
     }
 
     void odom2_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
-        odom_(msg, position2_, angles2_);
-        // position2_[0] = msg->pose.pose.position.x;
-        // position2_[1] = msg->pose.pose.position.y;
-        // position2_[2] = msg->pose.pose.position.z;
-        // position2_[3] = msg->twist.twist.linear.x;
-        // position2_[4] = msg->twist.twist.linear.y;
-        // position2_[5] = msg->twist.twist.linear.z;
-
-        // // Quaternion to Euler conversion
-        // tf2::Quaternion q(
-        //   msg->pose.pose.orientation.x,
-        //   msg->pose.pose.orientation.y,
-        //   msg->pose.pose.orientation.z,
-        //   msg->pose.pose.orientation.w);
-
-        // tf2::Matrix3x3 m(q);
-        // double roll, pitch, yaw;
-        // m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
-
-        // angles2_[0] = roll;
-        // angles2_[1] = pitch;
-        // angles2_[2] = yaw;
+        odom_(msg, position2_, angles2_, rot2_);
     }
 
     void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
-        odom_(msg, load_position_, load_angles_);
-        // load_position_[0] = msg->pose.pose.position.x;
-        // load_position_[1] = msg->pose.pose.position.y;
-        // load_position_[2] = msg->pose.pose.position.z;
-        // load_position_[3] = msg->twist.twist.linear.x;
-        // load_position_[4] = msg->twist.twist.linear.y;
-        // load_position_[5] = msg->twist.twist.linear.z;
-
-        // // Quaternion to Euler conversion
-        // tf2::Quaternion q(
-        //   msg->pose.pose.orientation.x,
-        //   msg->pose.pose.orientation.y,
-        //   msg->pose.pose.orientation.z,
-        //   msg->pose.pose.orientation.w);
-
-        // tf2::Matrix3x3 m(q);
-        // double roll, pitch, yaw;
-        // m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
-
-        // load_angles_[0] = roll;
-        // load_angles_[1] = pitch;
-        // load_angles_[2] = atan2(sin(yaw), cos(yaw));
-        // load_angles_[3] = msg->twist.twist.angular.z;  // only save Yaw velocity
+        odom_(msg, load_position_, load_angles_, rotl_);
     }
 
     void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
@@ -259,22 +175,28 @@ private:
         }
 
         // Now the drone is in "pulling" mode, control with MPC
-
-        // First, we're keeping the drones on the same height
-        new_cmd_msg1.linear.z = desired_height_ - position1_[2];
-        new_cmd_msg2.linear.z = desired_height_ - position2_[2];
-
         auto next_velocity = get_next_velocity_();
+        record_metrics(load_position_, {position1_, position2_}, {next_velocity[4], next_velocity[5]}, {1, 2});
 
-        // Limiting velocities for safety
-        new_cmd_msg1.linear.x = next_velocity[0]; //max(min(next_velocity[0], 0.1), -0.1);
-        new_cmd_msg1.linear.y = next_velocity[1]; //max(min(next_velocity[1], 0.1), -0.1);
+        Eigen::Vector3d v_local1, v_local2;
+        v_local1 << next_velocity[0], next_velocity[1], desired_height_ - position1_[2]; 
+        v_local2 << next_velocity[2], next_velocity[3], desired_height_ - position2_[2]; 
 
-        new_cmd_msg2.linear.x = next_velocity[2]; //max(min(next_velocity[2], 0.1), -0.1);
-        new_cmd_msg2.linear.y = next_velocity[3]; // max(min(next_velocity[3], 0.1), -0.1);
+        Eigen::Vector3d v_world1 = rot1_.transpose() * v_local1;
+        Eigen::Vector3d v_world2 = rot2_.transpose() * v_local2;
+
+        new_cmd_msg1.linear.x = max(min(v_world1(0), 0.2), -0.2);
+        new_cmd_msg1.linear.y = max(min(v_world1(1), 0.2), -0.2);
+        new_cmd_msg1.linear.z = max(min(v_world1(2), 0.2), -0.2);
+
+        new_cmd_msg2.linear.x = max(min(v_world2(0), 0.2), -0.2);
+        new_cmd_msg2.linear.y = max(min(v_world2(1), 0.2), -0.2);
+        new_cmd_msg2.linear.z = max(min(v_world2(2), 0.2), -0.2);
         
-        cout << "Next velocity drone 1: " << new_cmd_msg1.linear.x << ' ' << new_cmd_msg1.linear.y << endl;
-        cout << "Next velocity drone 2: " << new_cmd_msg2.linear.x << ' ' << new_cmd_msg2.linear.y << endl;
+        cout << "Next velocity (world) drone 1: " << next_velocity[0] << ' ' << next_velocity[1] << endl;
+        cout << "Next velocity (world) drone 2: " << next_velocity[2] << ' ' << next_velocity[3] << endl;
+        cout << "Next velocity (local) drone 1: " << new_cmd_msg1.linear.x << ' ' << new_cmd_msg1.linear.y << endl;
+        cout << "Next velocity (local) drone 2: " << new_cmd_msg2.linear.x << ' ' << new_cmd_msg2.linear.y << endl;
         
         twist_publisher1_->publish(new_cmd_msg1);
         twist_publisher2_->publish(new_cmd_msg2);
@@ -300,6 +222,16 @@ private:
             0,          0,         0 // doesn't matter
         );
 
+        // record_datapoint(
+        //     {
+        //         {"init_load", initial_load_state},
+        //         {"init_robot1", initial_robot1_state},
+        //         {"init_robot2", initial_robot2_state},
+        //         {"goal_load", final_load_goal},
+        //         {"height1" , position1_[2]},
+        //         {"height2" , position2_[2]},
+        //     }
+        // );
 
         cout << "\n===================" << std::endl;
         cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << ", " << initial_load_state[4] <<  ", " << initial_load_state[5] << std::endl;
@@ -308,8 +240,10 @@ private:
         cout << "Robots height: " << position1_[2] << ' ' << position2_[2] << std::endl;
         cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1]<<  ", " << final_load_goal[2] << std::endl;
 
-        auto executor = FactorExecutorFactory::create(0, initial_load_state, initial_robot1_state, initial_robot2_state, final_load_goal, position1_[2], position2_[2]);
-        return executor->run();
+        auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot1_state, initial_robot2_state, final_load_goal, position1_[2], position2_[2], {}, {});
+        map<string, double> factor_errors = {};
+        double pos_error = 0.0;
+        return executor->run(factor_errors, pos_error);
     }
 
     std::vector<double> get_next_points() {
@@ -326,11 +260,9 @@ private:
         std::vector<double> ans;
         ans.push_back(path_->poses[i].pose.position.x);
         ans.push_back(path_->poses[i].pose.position.y);
-        ans.push_back(atan2(sin(path_->poses[i].pose.orientation.x), cos(path_->poses[i].pose.orientation.x)) );
+        ans.push_back(path_->poses[i].pose.orientation.x); // atan2(sin(path_->poses[i].pose.orientation.x), cos(path_->poses[i].pose.orientation.x)) );
         return ans; 
     }
-
-
 };
 
 int main(int argc, char *argv[])

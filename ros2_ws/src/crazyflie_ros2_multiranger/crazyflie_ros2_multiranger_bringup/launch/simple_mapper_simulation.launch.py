@@ -23,7 +23,9 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_project_crazyflie_gazebo, 'launch', 'crazyflie_simulation.launch.py')),
         launch_arguments={ 
+            'one_drone': LaunchConfiguration('one_robot'), 
             'two_drones': LaunchConfiguration('two_robots'), 
+            'four_drones': LaunchConfiguration('four_robots'), 
         }.items()
     )
 
@@ -35,7 +37,8 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'robot_prefix': 'crazyflie_01'},
-            {'use_sim_time': True}
+            {'use_sim_time': True},
+            {'traj_type': 'circle'} # 'circle' / 'sin' / 'complex'
         ]
     )
 
@@ -102,6 +105,17 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('graph_mpc_with_ori'))
     )
 
+    mpcg_with_height_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc_with_height',
+        output='screen',
+        parameters=[
+            {'desired_height': 0.7},
+            {'robot_prefix': 'crazyflie_01'},
+        ],
+        condition=IfCondition(LaunchConfiguration('graph_mpc_with_height'))
+    )
+
     mpcg_two_drones_controller = Node(
         package='crazyflie_ros2_contoller_cpp',
         executable='mpc_two_drones',
@@ -122,12 +136,24 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('graph_mpc_two_robots_with_ori'))
     )
 
+    mpcg_four_drones_with_angle_controller = Node(
+        package='crazyflie_ros2_contoller_cpp',
+        executable='mpc_multi_drones_with_orientation',
+        output='screen',
+        parameters=[
+            {'robot_prefix': 'crazyflie'}, # indexes will be added in the code
+        ],
+        condition=IfCondition(LaunchConfiguration('graph_mpc_four_robots_with_ori'))
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'basic_mpc',
             default_value='false',
             description='Basic python MPC controller, considers cable to be always non-slack'
         ),
+
+        # Factor graph controller
         DeclareLaunchArgument(
             'graph_mpc',
             default_value='false',
@@ -137,6 +163,11 @@ def generate_launch_description():
             'graph_mpc_with_ori',
             default_value='false',
             description='MPC on factor graph for a single robot with load orientation.'
+        ),
+        DeclareLaunchArgument(
+            'graph_mpc_with_height',
+            default_value='false',
+            description='MPC on factor graph for a single robot with robot height.'
         ),
         DeclareLaunchArgument(
             'graph_mpc_two_robots',
@@ -149,18 +180,38 @@ def generate_launch_description():
             description='MPC on factor graph for 2 robots with load orientation.'
         ),
         DeclareLaunchArgument(
+            'graph_mpc_four_robots_with_ori',
+            default_value='false',
+            description='MPC on factor graph for 4 robots with load orientation.'
+        ),
+
+        # Number of robots per simulation
+        DeclareLaunchArgument(
+            'one_robot',
+            default_value='false',
+            description='Whether simulator has 1 robot or not.'
+        ),
+        DeclareLaunchArgument(
             'two_robots',
             default_value='false',
-            description='Whether simulator has 2 robots or not (or has only one).'
+            description='Whether simulator has 2 robots or not.'
+        ),
+        DeclareLaunchArgument(
+            'four_robots',
+            default_value='false',
+            description='Whether simulator has 4 robots or not.'
         ),
 
         crazyflie_simulation,
         simple_traj_publisher,
         load_path_publisher,
         mpc_controller,
+        # Factor graph controllers
         mpcg_controller,
         mpcg_with_angle_controller,
+        mpcg_with_height_controller,
         mpcg_two_drones_controller,
         mpcg_two_drones_with_angle_controller,
+        mpcg_four_drones_with_angle_controller,
         rviz
         ])

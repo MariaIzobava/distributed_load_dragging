@@ -3,12 +3,12 @@
   <model name="segment">
     <link name="segment_link">
       <inertial>
-        <mass>0.00001</mass>
+        <mass>0.001</mass>
         <pose>0 0 0 0 1.5708 0</pose>
         <inertia>
-            <ixx>1e-9</ixx>
-            <iyy>1e-9</iyy>
-            <izz>1e-9</izz>
+            <ixx>1e-7</ixx>
+            <iyy>1e-7</iyy>
+            <izz>1e-7</izz>
         </inertia>
       </inertial>
       <visual name="segment_visual">

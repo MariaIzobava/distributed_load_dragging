@@ -1,0 +1,75 @@
+{
+    "double_params" : {
+        "u_upper_bound": {
+            "lb": 0.8,
+            "ub": 1.8,
+            "step": 100.0
+        },
+        "u_lower_bound": {
+            "lb": 0.003,
+            "ub": 0.003,
+            "step": 2.0
+        },
+
+
+        "weight_tension_lower_bound": {
+            "lb": 1000.0,
+            "ub": 1000000.0,
+            "step": 10.0
+        },
+        "weight_cable_stretch": {
+            "lb": 10.0,
+            "ub": 1000.0,
+            "step": 10.0
+        },
+        "weight_tension_slack": {
+            "lb": 5.0,
+            "ub": 5000.0,
+            "step": 10.0
+        },
+        "weight_tether_tension": {
+            "lb": 16.0,
+            "ub": 16.0,
+            "step": 5.0
+        },
+
+
+        "cable_length_offset": {
+            "lb": 0.00007,
+            "ub": 0.07,
+            "step": 5.0
+        },
+        "cable_stretch_offset": {
+            "lb": 0.0001,
+            "ub": 0.01,
+            "step": 10.0
+        },
+
+        "goal_cost": {
+            "lb": 0.000005,
+            "ub": 0.005,
+            "step": 10.0
+        },
+        "control_interim_cost": {
+            "lb": 1.0,
+            "ub": 1.0,
+            "step": 10.0
+        }
+    },
+
+    "boolean_params": {
+        "have_u0_prior" : false,
+        "have_uk_prior" : false,
+        "have_t0_prior" : false,
+        "have_tk_prior" : false,
+
+        "have_goal_prior" : false,
+
+        "have_tension_lower_bound_factor" : false,
+        "have_cable_stretch_factor" : false,
+        "have_tension_slack_penalty_factor" : false,
+        "have_tether_tension_factor" : false,
+
+        "have_trajectory_reference_factor" : false
+    }
+}

@@ -10,8 +10,13 @@ class TrajectoryPublisher(Node):
     def __init__(self):
         super().__init__('trajectory_publisher')
         self.started = False
+
         self.declare_parameter('robot_prefix', '/crazyflie')
         robot_prefix = self.get_parameter('robot_prefix').value
+
+        self.declare_parameter('traj_type', 'circle')
+        self.traj_type = self.get_parameter('traj_type').value
+
         self.start_subsc_ = self.create_subscription(Odometry, robot_prefix + '/odom', self.start_cb, 10)
         self.publisher_ = self.create_publisher(Path, 'desired_path', 10)
         self.timer = self.create_timer(1.0, self.publish_path) # Publish every second (or once)
@@ -29,8 +34,21 @@ class TrajectoryPublisher(Node):
     def publish_path(self):
         if not self.started:
             return
+
+        if (self.traj_type == 'circle'):
+            self.publish_circle_()
+        elif (self.traj_type == 'sin'):
+            self.publish_sin_()
+        elif (self.traj_type == 'complex'):
+            self.publish_complex_()
+        else:
+            print('WRONG trajectory type: ', self.traj_type)
+            return
+
+
+    def publish_circle_(self):
         path_msg = Path()
-        path_msg.header.frame_id = 'odom' # Or 'odom', depending on your setup
+        path_msg.header.frame_id = 'odom'
         path_msg.header.stamp = self.get_clock().now().to_msg()
 
         cur_time = round(time.time() * 1000)
@@ -52,10 +70,57 @@ class TrajectoryPublisher(Node):
             path_msg.poses.append(pose)
 
         self.publisher_.publish(path_msg)
-        #self.get_logger().info('Published desired path.')
 
-        # For a static path, you might only publish it once and then stop the timer
-        #self.timer.cancel() # Uncomment if you only want to publish once
+
+    def publish_sin_(self):
+        path_msg = Path()
+        path_msg.header.frame_id = 'odom'
+        path_msg.header.stamp = self.get_clock().now().to_msg()
+
+        cur_time = round(time.time() * 1000)
+
+        step_y = 0.002
+
+        cur_points = int((cur_time - self.start_time) / 100 + 120)
+        for i in range(cur_points):
+            y = step_y * i
+            x = math.sin(y)
+            pose = PoseStamped()
+            pose.header.frame_id = 'odom'
+            pose.header.stamp = path_msg.header.stamp
+            pose.pose.position.x = -x
+            pose.pose.position.y = y
+            pose.pose.position.z = 0.0 # Assuming 2D path
+            pose.pose.orientation.x = 0.0 # saving orientation
+            path_msg.poses.append(pose)
+
+        self.publisher_.publish(path_msg)
+
+
+    def publish_complex_(self):
+        path_msg = Path()
+        path_msg.header.frame_id = 'odom'
+        path_msg.header.stamp = self.get_clock().now().to_msg()
+
+        cur_time = round(time.time() * 1000)
+
+        step_y = 0.001
+
+        cur_points = int((cur_time - self.start_time) / 100 + 120)
+        for i in range(cur_points):
+            y = step_y * i
+            x = math.sin(0.5 * y) + math.sin(0.3 * y) + math.sin(2.4 * y)
+            pose = PoseStamped()
+            pose.header.frame_id = 'odom'
+            pose.header.stamp = path_msg.header.stamp
+            pose.pose.position.x = -x
+            pose.pose.position.y = y
+            pose.pose.position.z = 0.0 # Assuming 2D path
+            pose.pose.orientation.x = 0.0 # saving orientation
+            path_msg.poses.append(pose)
+
+        self.publisher_.publish(path_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)

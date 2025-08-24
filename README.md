@@ -5,7 +5,7 @@ https://www.bitcraze.io/2024/09/crazyflies-adventures-with-ros-2-and-gazebo/
 ## Build
 
 ```
-cd  ~/crazyflie_gazebo/ros2_ws/
+cd <PATH_TO_REPO>/ros2_ws/
 source /opt/ros/humble/setup.bash
 colcon build --cmake-args -DBUILD_TESTING=ON
 ```
@@ -24,9 +24,11 @@ export GZ_SIM_RESOURCE_PATH="$PWD/src/ros_gz_crazyflie/ros_gz_crazyflie_gazebo/m
 ### Simulation
 ```
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc:=True
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_with_height:=True
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_with_ori:=True
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_two_robots:=True two_robots:=True
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_two_robots_with_ori:=True two_robots:=True
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_four_robots_with_ori:=True four_robots:=True
 ```
 
 ### Real

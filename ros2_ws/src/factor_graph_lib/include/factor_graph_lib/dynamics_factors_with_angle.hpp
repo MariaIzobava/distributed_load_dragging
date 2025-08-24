@@ -48,16 +48,9 @@ public:
         Vector4 predicted_xr_k_plus_1(4);
         predicted_xr_k_plus_1 << next_pos, next_vel;
 
-        // cout << "RobotDyn pos: " << pos_k(0) << ' ' << pos_k(1) << endl;
-        // cout << "RobotDyn e_norm: " << e_norm(0) << ' ' << e_norm(1) << endl;
-        // cout << "RobotDyn cur vel: " << vel_k(0) << ' ' << vel_k(1) << endl;
-        // cout << "RobotDyn next vel: " << next_vel(0) << ' ' << next_vel(1) << endl;
-        // cout << "RobotDyn cur u and T: " << u_k(0) << ' ' << u_k(1) << ' ' << tension_k(0) << endl;
-
         return (Vector(4) << xr_k_plus_1 - predicted_xr_k_plus_1).finished();
     }
 
-    // The evaluateError function, which implements the factor's error calculation.
     Vector evaluateError(const Vector4& xr_k,
                          const Vector6& xl_k,
                          const Vector2& u_k, 
@@ -167,6 +160,7 @@ class LoadDynamicsWithLoadOrientationFactor: public NoiseModelFactor4<Vector6, V
     double g_;
     double inertia_;
     bool analitical_derivative_;
+    double eps_ = 1000000.0;
 
 public:
     LoadDynamicsWithLoadOrientationFactor(Key key_xl_k, Key key_xr_k, Key key_tension_k, Key key_xl_k_plus_1,
@@ -191,8 +185,6 @@ public:
         Vector3 vel_k = xl_k.tail<3>();
         Vector3 next_pos = pos_k + vel_k * dt_;
 
-        //next_pos(2) = atan2(sin(next_pos(2)), cos(next_pos(2)));
-
         CableVectorHelper h(xr_k, xl_k);
 
         Vector2 next_lin_vel = lin_vel_k + dt_ * (tension_k(0) * h.e_norm - mu_ * load_mass_ * g_ * normed_vel_k) / load_mass_;
@@ -201,22 +193,11 @@ public:
         double r2 = -0.2 * sin(xl_k(2));
 
         Vector1 next_ang_vel(1);
-        next_ang_vel(0) = xl_k(5) + dt_ / inertia_ * (r1 * tension_k(0) * h.e_norm(1) - r2 * tension_k(0) * h.e_norm(0) - mu2_ * load_mass_ * g_ * tanh(10000000.0 * xl_k(5))); 
+        next_ang_vel(0) = xl_k(5) + dt_ / inertia_ * (r1 * tension_k(0) * h.e_norm(1) - r2 * tension_k(0) * h.e_norm(0) - mu2_ * load_mass_ * g_ * tanh(eps_ * xl_k(5))); 
 
         Vector6 predicted_xl_k_plus_1(6);
         predicted_xl_k_plus_1 << next_pos, next_lin_vel, next_ang_vel;
         Vector6 state_diff = xl_k_plus_1 - predicted_xl_k_plus_1;
-        //state_diff(2) = atan2(sin(state_diff(2)), cos(state_diff(2)));
-
-        //cout << "LoadDyn cur vel: " << xl_k(3) << ' ' << xl_k(4) << ' '<< xl_k(5) << endl;
-        //cout << "LoadDyn normed lin vel: " << normed_vel_k(0) << ' ' << normed_vel_k(1) << endl;
-        //cout << "LoadDyn next vel: " << next_lin_vel(0) << ' ' << next_lin_vel(1) << ' ' << next_ang_vel(0) << endl;
-        //cout << "LoadDyn Accel: " <<  load_accel(0) << ' ' << load_accel(1) << endl;
-
-        //cout << "LoadDyn pos: " << pos_k(0) << ' ' << pos_k(1) << endl;
-        //cout << "LoadDyn e_norm: " << e_norm(0) << ' ' << e_norm(1) << endl;
-        //cout << "LoadDyn pa: " << p(0) << ' ' << p(1) << " angle: " << xl_k(2) << endl;  
-        //cout << "LoadDyn cur T: " << tension_k(0) << endl;
 
         return state_diff;
 
@@ -254,12 +235,11 @@ public:
         double r2 = -0.2 * sin(xl_k(2));
         double r1_dtheta = 0.2 * sin(xl_k(2));
         double r2_dtheta = -0.2 * cos(xl_k(2));
-        double sech_sq_theta = 10000000.0 * (1.0 / cosh(10000000.0 * xl_k(5))) * (1.0 / cosh(10000000.0 * xl_k(5)));
+        double sech_sq_theta = eps_ * (1.0 / cosh(eps_ * xl_k(5))) * (1.0 / cosh(eps_ * xl_k(5)));
         double A_CNST = dt_ / load_mass_ * tension_k(0);
 
         if (H1) {
             if (analitical_derivative_) {
-
                 *H1 = (gtsam::Matrix(6, 6) << 
                     -1,  0,  0, -dt_,  0,   0,
                     0, -1,  0,   0, -dt_,  0,
@@ -276,7 +256,6 @@ public:
                     ).finished();
 
             } else {
-
                 *H1 = numericalDerivative41<Vector,Vector6, Vector4, Vector1, Vector6 > (
                     [this](const Vector6& a, 
                             const Vector4& b,
@@ -290,7 +269,6 @@ public:
         }
         if (H2) {
             if (analitical_derivative_) {
-
                 *H2 = (gtsam::Matrix(6, 4) << 
                     0, 0,  0,  0,
                     0, 0,  0,  0,
@@ -353,6 +331,7 @@ class LoadDynamicsTwoRobotsWithLoadOrientationFactor: public NoiseModelFactor6<V
     double inertia_;
     double g_;
     double analitical_derivative_;
+    double eps_ = 1000000.0;
 
 public:
     LoadDynamicsTwoRobotsWithLoadOrientationFactor(
@@ -392,8 +371,6 @@ public:
         Vector3 vel_k = xl_k.tail<3>();
         Vector3 next_pos = pos_k + vel_k * dt_;
 
-        //next_pos(2) = atan2(sin(next_pos(2)), cos(next_pos(2)));
-
         CableVectorHelper h1(xr1_k, xl_k);
         CableVectorHelper h2(xr2_k, xl_k, 2);
 
@@ -406,13 +383,10 @@ public:
         double r22 = 0.2 * cos(xl_k(2));
 
         Vector1 next_ang_vel(1);
-        next_ang_vel(0) = xl_k(5) + dt_ / inertia_ * (r1 * tension1_k(0) * h1.e_norm(1) - r2 * tension1_k(0) * h1.e_norm(0) + r21 * tension2_k(0) * h2.e_norm(1) - r22 * tension2_k(0) * h2.e_norm(0) - mu2_ * load_mass_ * g_ * tanh(10000000.0 * xl_k(5))); 
+        next_ang_vel(0) = xl_k(5) + dt_ / inertia_ * (r1 * tension1_k(0) * h1.e_norm(1) - r2 * tension1_k(0) * h1.e_norm(0) + r21 * tension2_k(0) * h2.e_norm(1) - r22 * tension2_k(0) * h2.e_norm(0) - mu2_ * load_mass_ * g_ * tanh(eps_ * xl_k(5))); 
 
         Vector6 predicted_xl_k_plus_1(6);
         predicted_xl_k_plus_1 << next_pos, next_lin_vel, next_ang_vel;
-        //Vector6 state_diff = xl_k_plus_1 - predicted_xl_k_plus_1;
-        //state_diff(2) = atan2(sin(state_diff(2)), cos(state_diff(2)));
-        //return state_diff;
 
         return (Vector(6) << xl_k_plus_1 - predicted_xl_k_plus_1).finished();
     }
@@ -460,10 +434,9 @@ public:
         double r22 = 0.2 * cos(xl_k(2));
         double r21_dtheta = -0.2 * cos(xl_k(2));
         double r22_dtheta = -0.2 * sin(xl_k(2));
-        double sech_sq_theta = 10000000.0 * (1.0 / cosh(10000000.0 * xl_k(5))) * (1.0 / cosh(10000000.0 * xl_k(5)));
+        double sech_sq_theta = eps_ * (1.0 / cosh(eps_ * xl_k(5))) * (1.0 / cosh(eps_ * xl_k(5)));
         double A_CNST1 = dt_ / load_mass_ * tension1_k(0);
         double A_CNST2 = dt_ / load_mass_ * tension2_k(0);
-        
 
         if (H1) {
             if (!analitical_derivative_) {
@@ -599,7 +572,6 @@ public:
         }
 
         return evaluateErrorOnly(xl_k,  xr1_k, tension1_k,  xr2_k, tension2_k, xl_k_plus_1);
-
     }
 };
 

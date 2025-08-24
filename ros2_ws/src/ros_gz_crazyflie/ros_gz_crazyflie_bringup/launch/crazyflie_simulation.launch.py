@@ -30,8 +30,18 @@ from launch_ros.actions import Node
 def generate_launch_description():
     # Configure ROS nodes for launch
 
+    one_drone_arg = DeclareLaunchArgument(
+        'one_drone',
+        default_value='false'
+    )
+
     two_drones_arg = DeclareLaunchArgument(
         'two_drones',
+        default_value='false'
+    )
+
+    four_drones_arg = DeclareLaunchArgument(
+        'four_drones',
         default_value='false'
     )
 
@@ -45,6 +55,16 @@ def generate_launch_description():
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
     # Setup to launch the simulator and Gazebo world
+    gz_sim_four_drones = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
+        condition=IfCondition(LaunchConfiguration('four_drones')),
+        launch_arguments={'gz_args': PathJoinSubstitution([
+            pkg_project_gazebo,
+            'worlds',
+            'four_crazyflies_world.sdf -r'
+        ])}.items()
+    )
     gz_sim_two_drones = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
@@ -52,20 +72,35 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_gazebo,
             'worlds',
-            'two_crazyflies_with_less_segments_world.sdf -r'
+            #'two_crazyflies_with_less_segments_world.sdf -r'
             #'two_crazyflies_with_load_world.sdf -r'
+            #'two_crazyflies_2_segments_at_angle_world.sdf -r'
+            'two_crazyflies_2_segments_in_the_middle_world.sdf -r'
         ])}.items()
     )
     gz_sim_one_drone = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
-        condition=UnlessCondition(LaunchConfiguration('two_drones')),
+        condition=IfCondition(LaunchConfiguration('one_drone')),
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_gazebo,
             'worlds',
+            #'crazyflie_with_load_world.sdf -r'
             #'crazyflie_with_load_many_segments_world.sdf -r'
             'crazyflie_with_load_in_the_middle_world.sdf -r'
+            #'crazyflie_on_the_side_world.sdf -r'
         ])}.items()
+    )
+
+    bridge_four_drones = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        parameters=[{
+            'config_file': os.path.join(pkg_project_bringup, 'config', 'ros_gz_four_crazyflies_bridge.yaml'),
+        }],
+
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('four_drones'))
     )
 
     bridge_two_drones = Node(
@@ -87,7 +122,7 @@ def generate_launch_description():
         }],
 
         output='screen',
-        condition=UnlessCondition(LaunchConfiguration('two_drones'))
+        condition=IfCondition(LaunchConfiguration('one_drone'))
     )
 
     # control = Node(
@@ -130,14 +165,56 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('two_drones'))
     )
 
+    control_042 = Node(
+        package='ros_gz_crazyflie_control',
+        executable='control_services',
+        output='screen',
+        parameters=[
+            {'hover_height': 0.2},
+            {'robot_prefix': '/crazyflie_02'},
+            {'incoming_twist_topic': '/cmd_vel_02'},
+            {'max_ang_z_rate': 0.4},
+        ],
+        condition=IfCondition(LaunchConfiguration('four_drones'))
+    )
+    control_043 = Node(
+        package='ros_gz_crazyflie_control',
+        executable='control_services',
+        output='screen',
+        parameters=[
+            {'hover_height': 0.2},
+            {'robot_prefix': '/crazyflie_03'},
+            {'incoming_twist_topic': '/cmd_vel_03'},
+            {'max_ang_z_rate': 0.4},
+        ],
+        condition=IfCondition(LaunchConfiguration('four_drones'))
+    )
+    control_044 = Node(
+        package='ros_gz_crazyflie_control',
+        executable='control_services',
+        output='screen',
+        parameters=[
+            {'hover_height': 0.2},
+            {'robot_prefix': '/crazyflie_04'},
+            {'incoming_twist_topic': '/cmd_vel_04'},
+            {'max_ang_z_rate': 0.4},
+        ],
+        condition=IfCondition(LaunchConfiguration('four_drones'))
+    )
+
     return LaunchDescription([
         two_drones_arg,
         gz_ln_arg,
         gz_sim_two_drones,
         gz_sim_one_drone,
+        gz_sim_four_drones,
+        bridge_four_drones,
         bridge_two_drones,
         bridge_one_drone,
         #control,
         control_01,
-        control_02
-                ])
+        control_02,
+        control_042,
+        control_043,
+        control_044
+    ])

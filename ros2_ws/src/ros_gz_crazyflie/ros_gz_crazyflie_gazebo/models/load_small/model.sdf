@@ -114,6 +114,28 @@
     <child>y_hook</child>
   </joint>
 
+  <link name="y_middle_hook">
+    <pose>0 0.2 0.2 0 0 0</pose> 
+    <inertial>
+      <!-- <mass>0.000001</mass> -->
+      <mass>0.00001</mass>
+        <inertia>
+          <ixx>1e-9</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-9</iyy>
+          <iyz>0</iyz>
+          <izz>1e-9</izz>
+        </inertia>
+    </inertial>
+    <visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual>
+    <collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision>
+  </link>
+  <joint name="box_to_middle_hook_y_joint" type="fixed">
+    <parent>box_body</parent>
+    <child>y_middle_hook</child>
+  </joint>
+
   <plugin
       filename="gz-sim-odometry-publisher-system"
       name="gz::sim::systems::OdometryPublisher">

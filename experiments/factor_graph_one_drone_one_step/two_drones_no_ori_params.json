@@ -1,0 +1,32 @@
+{
+    "double_params" : {
+
+        "weight_tether_tension": {
+            "lb": 0.0016,
+            "ub": 21.0,
+            "step": 2.0
+        },
+
+        "tether_tension_offset": {
+            "lb": 0.00007,
+            "ub": 0.07,
+            "step": 2.0
+        }
+    },
+
+    "boolean_params": {
+        "have_u0_prior" : false,
+        "have_uk_prior" : false,
+        "have_t0_prior" : false,
+        "have_tk_prior" : false,
+
+        "have_goal_prior" : false,
+
+        "have_tension_lower_bound_factor" : false,
+        "have_cable_stretch_factor" : false,
+        "have_tension_slack_penalty_factor" : false,
+        "have_tether_tension_factor" : false,
+
+        "have_trajectory_reference_factor" : true
+    }
+}

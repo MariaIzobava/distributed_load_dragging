@@ -13,20 +13,22 @@
 #include "factor_graph_lib/common.hpp"
 
 #include <vector>
-#include <cstdio> // For snprintf
-
+#include <cstdio>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
+
 class BaseMpc : public rclcpp::Node
 {
 public:
-  // A virtual destructor is important for base classes
   virtual ~BaseMpc() {}
 
 protected:
-  // Protected constructor so it can only be called by derived classes
+  rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
+  nav_msgs::msg::Path::SharedPtr path_;
+  std::chrono::high_resolution_clock::time_point start_time_;
+
   explicit BaseMpc(
     const std::string& metrics_file,
     int num_robots, 
@@ -35,8 +37,32 @@ protected:
     const std::string& datapoints_file,
     const std::string& node_name)
   : rclcpp::Node(node_name), metrics_file_(metrics_file), num_robots_(num_robots), load_ori_(load_ori), robot_height_(robot_height), datapoints_file_(datapoints_file) {
+    
+    path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
+          "/desired_path",
+          10, // QoS history depth
+          std::bind(&BaseMpc::path_subscribe_callback, this, std::placeholders::_1));
+
     // Clean up and initialize metrics file with correct headers
     initialize_metrics_file();
+  }
+
+  std::vector<double> get_next_points() {
+      //int num_p = 4000; // num_p is number of points
+      
+      // Get current time
+      auto cur_time = std::chrono::high_resolution_clock::now();
+      
+      // Calculate seconds from the beginning
+      auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
+
+      int i = (cur_millisec.count() / 100 + 10);
+      cout << i << ' ' << path_->poses.size() << std::endl;
+      std::vector<double> ans;
+      ans.push_back(path_->poses[i].pose.position.x);
+      ans.push_back(path_->poses[i].pose.position.y);
+      ans.push_back(path_->poses[i].pose.orientation.x); // atan2(sin(path_->poses[i].pose.orientation.x), cos(path_->poses[i].pose.orientation.x))
+      return ans; 
   }
 
   void odom_(const nav_msgs::msg::Odometry::SharedPtr msg, std::vector<double>& position, std::vector<double>& angles, Eigen::Matrix3d& rotation_m) {
@@ -53,7 +79,7 @@ protected:
 
       tf2::Matrix3x3 m(q);
       double roll, pitch, yaw;
-      m.getRPY(roll, pitch, yaw); // getRPY returns roll, pitch, yaw in radians
+      m.getRPY(roll, pitch, yaw);
 
       angles[0] = roll;
       angles[1] = pitch;
@@ -77,8 +103,6 @@ protected:
     std::vector<int> ap_directions) {
       // Open the file in append mode (std::ios::app)
       std::ofstream file(metrics_file_, std::ios::app);
-      
-      // Check if the file was opened successfully
       if (!file.is_open()) {
           std::cerr << "Error: Could not open the file " << metrics_file_ << std::endl;
           return;
@@ -111,44 +135,9 @@ protected:
         }
       }
 
-      // Convert the vector of doubles to a comma-separated string
       std::string line = join(row, ",");
-      
-      // Write the line to the file, followed by a newline
       file << line << std::endl;
-      
-      // Close the file stream
       file.close();   
-  }
-
-  void initialize_metrics_file() {
-      // First clean up the file if there is anything in it
-      std::ofstream ofs;
-      ofs.open(metrics_file_, std::ofstream::out | std::ofstream::trunc);
-      ofs.close();
-      
-      std::ofstream header_file(metrics_file_);
-      if (!header_file.is_open()) {
-          std::cerr << "Error: Could not create the file " << metrics_file_ << std::endl;
-          return;
-      }
-      // Now construct the required headers
-
-      header_file << "timestamp,actual_load_x,actual_load_y";
-      std::string drone_tmpl = "drone%d_pose_x,drone%d_pose_y,drone%d_pose_z,drone%d_velocity_x,drone%d_velocity_y,drone%d_velocity_z,cable%d_tension";
-      
-      for (int i = 1; i <= num_robots_; i++) {
-        char buffer[150];
-        snprintf(buffer, sizeof(buffer), drone_tmpl.c_str(), i, i, i, i, i, i, i);
-        std::string drone_str(buffer);
-        header_file << "," << drone_str;
-
-        if (load_ori_) {
-          header_file << "," << "attachment_point" << i << "_x,attachment_point" << i << "_y";
-        }
-      }
-      header_file << std::endl;
-      header_file.close();
   }
 
   void record_datapoint(const std::map<std::string, json>& data) {
@@ -169,13 +158,6 @@ protected:
 
         jsonData.push_back(data);
 
-              //     jsonData.push_back({
-        //         {"init_load", initial_load_state},
-        //         {"init_robot", initial_robot_state},
-        //         {"goal_load", final_load_goal},
-        //         {"height" , position_[2]},
-        //     });
-
         std::ofstream output_file(datapoints_file_);
         if (output_file.is_open()) {
             output_file << jsonData.dump(4);
@@ -187,7 +169,54 @@ protected:
     }
   }
 
+  void convert_robot_velocity_to_local_frame(double x, double y, double z, const Eigen::Matrix3d& rotation_m, geometry_msgs::msg::Twist& msg, double limit = 0.2) {
+    Eigen::Vector3d v_local;
+    v_local << x, y, z; 
+
+    Eigen::Vector3d v_world = rotation_m.transpose() * v_local;
+
+    msg.linear.x = max(min(v_world(0), limit), -limit);
+    msg.linear.y = max(min(v_world(1), limit), -limit);
+    msg.linear.z = max(min(v_world(2), limit), -limit); 
+  }
+
 private:
+
+  void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
+  {
+      path_ = msg;
+  }
+
+  void initialize_metrics_file() {
+      // First clean up the file if there is anything in it
+      std::ofstream ofs;
+      ofs.open(metrics_file_, std::ofstream::out | std::ofstream::trunc);
+      ofs.close();
+      
+      std::ofstream header_file(metrics_file_);
+      if (!header_file.is_open()) {
+          std::cerr << "Error: Could not create the file " << metrics_file_ << std::endl;
+          return;
+      }
+
+      // Now construct the required headers
+      header_file << "timestamp,actual_load_x,actual_load_y";
+      std::string drone_tmpl = "drone%d_pose_x,drone%d_pose_y,drone%d_pose_z,drone%d_velocity_x,drone%d_velocity_y,drone%d_velocity_z,cable%d_tension";
+      
+      for (int i = 1; i <= num_robots_; i++) {
+        char buffer[150];
+        snprintf(buffer, sizeof(buffer), drone_tmpl.c_str(), i, i, i, i, i, i, i);
+        std::string drone_str(buffer);
+        header_file << "," << drone_str;
+
+        if (load_ori_) {
+          header_file << "," << "attachment_point" << i << "_x,attachment_point" << i << "_y";
+        }
+      }
+      header_file << std::endl;
+      header_file.close();
+  }
+
   // This function takes roll, pitch, and yaw (rx, ry, rz)
   // and returns a combined 3x3 rotation matrix.
   // The order of multiplication is Z-Y-X.

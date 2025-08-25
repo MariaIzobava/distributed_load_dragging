@@ -19,7 +19,7 @@ class TrajectoryPublisher(Node):
 
         self.start_subsc_ = self.create_subscription(Odometry, robot_prefix + '/odom', self.start_cb, 10)
         self.publisher_ = self.create_publisher(Path, 'desired_path', 10)
-        self.timer = self.create_timer(1.0, self.publish_path) # Publish every second (or once)
+        self.timer = self.create_timer(1.0, self.publish_path) # Publish every second
         self.get_logger().info('Trajectory publisher node started.')
 
     def start_cb(self, msg):
@@ -55,11 +55,11 @@ class TrajectoryPublisher(Node):
 
         # Example: A simple circular path
         radius = 2.0
-        num_points = 4000
+        num_points_per_circle = 4000
 
-        cur_points = int((cur_time - self.start_time) / 100 + 120) % num_points
+        cur_points = int((cur_time - self.start_time) / 100 + 120)
         for i in range(cur_points):
-            angle = 2 * math.pi * i / num_points - math.pi / 2.0
+            angle = 2 * math.pi * i / num_points_per_circle - math.pi / 2.0
             pose = PoseStamped()
             pose.header.frame_id = 'odom'
             pose.header.stamp = path_msg.header.stamp

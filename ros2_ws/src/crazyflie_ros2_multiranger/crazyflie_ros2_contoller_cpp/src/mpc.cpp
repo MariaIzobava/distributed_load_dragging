@@ -62,11 +62,6 @@ public:
         is_pulling_ = false;
         desired_height_ = 0.5;
 
-        path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
-          "/desired_path",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::path_subscribe_callback, this, std::placeholders::_1));
-
         odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
           robot_prefix_ + "/odom",
           10, // QoS history depth
@@ -90,7 +85,6 @@ public:
 
 private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher_;
-    rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
@@ -101,14 +95,12 @@ private:
     std::vector<double> load_position_;
     std::vector<double> load_angles_;
     Eigen::Matrix3d rot_l_, rot_r_;
-    nav_msgs::msg::Path::SharedPtr path_;
 
     Vector2 last_control_;
     Vector1 last_tension_;
 
     bool is_pulling_;
     double desired_height_;
-    std::chrono::high_resolution_clock::time_point start_time_;
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -129,11 +121,6 @@ private:
     void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
         odom_(msg, load_position_, load_angles_, rot_l_);
-    }
-
-    void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
-    {
-        path_ = msg;
     }
     
     void timer_callback()
@@ -158,20 +145,16 @@ private:
         }
 
         // Now the drone is in "pulling" mode, control with MPC
-        // First, we're keeping the drone on the same height
         auto next_velocity = get_next_velocity_();
+
         last_control_ << next_velocity[2], next_velocity[3];
         last_tension_ << next_velocity[4];
         record_metrics(load_position_, {position_}, {last_tension_[0]}, {});
 
-        Eigen::Vector3d v_local;
-        v_local << next_velocity[0], next_velocity[1], desired_height_ - position_[2]; 
-
-        Eigen::Vector3d v_world = rot_r_.transpose() * v_local;
-
-        new_cmd_msg.linear.x = max(min(v_world(0), 0.2), -0.2);
-        new_cmd_msg.linear.y = max(min(v_world(1), 0.2), -0.2);
-        new_cmd_msg.linear.z = max(min(v_world(2), 0.2), -0.2); 
+        convert_robot_velocity_to_local_frame(
+            next_velocity[0], next_velocity[1], desired_height_ - position_[2], 
+            rot_r_, new_cmd_msg, 0.2
+        );
         
         cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
         cout << "Next control: " << last_control_[0] << ' ' << last_control_[1] << endl;
@@ -216,23 +199,6 @@ private:
         map<string, double> factor_errors = {};
         double pos_error = 0.0;
         return executor->run(factor_errors, pos_error);
-    }
-
-    std::vector<double> get_next_points() {
-        int num_p = 4000; // num_p is number of points
-        
-        // Get current time
-        auto cur_time = std::chrono::high_resolution_clock::now();
-        
-        // Calculate seconds from the beginning
-        auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
-
-        int i = (cur_millisec.count() / 100 + 10) % num_p;
-        cout << i << ' ' << path_->poses.size() << std::endl;
-        std::vector<double> ans;
-        ans.push_back(path_->poses[i].pose.position.x);
-        ans.push_back(path_->poses[i].pose.position.y);
-        return ans; 
     }
 };
 

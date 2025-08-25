@@ -62,11 +62,6 @@ public:
         is_pulling_ = 0;
         desired_height_ = 0.5;
 
-        path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
-          "/desired_path",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::path_subscribe_callback, this, std::placeholders::_1));
-
         odom_subscription1_ = this->create_subscription<nav_msgs::msg::Odometry>(
           robot_prefix_ + "_01/odom",
           10, // QoS history depth
@@ -96,7 +91,6 @@ public:
 
 private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher1_, twist_publisher2_;
-    rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription1_, odom_subscription2_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
@@ -107,11 +101,9 @@ private:
     std::vector<double> load_position_;
     std::vector<double> load_angles_;
     Eigen::Matrix3d rot1_, rot2_, rotl_;
-    nav_msgs::msg::Path::SharedPtr path_;
 
     int is_pulling_;
     double desired_height_;
-    std::chrono::high_resolution_clock::time_point start_time_;
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -138,11 +130,6 @@ private:
     void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
         odom_(msg, load_position_, load_angles_, rotl_);
-    }
-
-    void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
-    {
-        path_ = msg;
     }
     
     void timer_callback()
@@ -176,23 +163,19 @@ private:
 
         // Now the drone is in "pulling" mode, control with MPC
         auto next_velocity = get_next_velocity_();
+
         record_metrics(load_position_, {position1_, position2_}, {next_velocity[4], next_velocity[5]}, {1, 2});
 
-        Eigen::Vector3d v_local1, v_local2;
-        v_local1 << next_velocity[0], next_velocity[1], desired_height_ - position1_[2]; 
-        v_local2 << next_velocity[2], next_velocity[3], desired_height_ - position2_[2]; 
+        convert_robot_velocity_to_local_frame(
+            next_velocity[0], next_velocity[1], desired_height_ - position1_[2], 
+            rot1_, new_cmd_msg1, 0.2
+        );
 
-        Eigen::Vector3d v_world1 = rot1_.transpose() * v_local1;
-        Eigen::Vector3d v_world2 = rot2_.transpose() * v_local2;
+        convert_robot_velocity_to_local_frame(
+            next_velocity[2], next_velocity[3], desired_height_ - position2_[2], 
+            rot2_, new_cmd_msg2, 0.2
+        );
 
-        new_cmd_msg1.linear.x = max(min(v_world1(0), 0.2), -0.2);
-        new_cmd_msg1.linear.y = max(min(v_world1(1), 0.2), -0.2);
-        new_cmd_msg1.linear.z = max(min(v_world1(2), 0.2), -0.2);
-
-        new_cmd_msg2.linear.x = max(min(v_world2(0), 0.2), -0.2);
-        new_cmd_msg2.linear.y = max(min(v_world2(1), 0.2), -0.2);
-        new_cmd_msg2.linear.z = max(min(v_world2(2), 0.2), -0.2);
-        
         cout << "Next velocity (world) drone 1: " << next_velocity[0] << ' ' << next_velocity[1] << endl;
         cout << "Next velocity (world) drone 2: " << next_velocity[2] << ' ' << next_velocity[3] << endl;
         cout << "Next velocity (local) drone 1: " << new_cmd_msg1.linear.x << ' ' << new_cmd_msg1.linear.y << endl;
@@ -244,24 +227,6 @@ private:
         map<string, double> factor_errors = {};
         double pos_error = 0.0;
         return executor->run(factor_errors, pos_error);
-    }
-
-    std::vector<double> get_next_points() {
-        int num_p = 4000; // num_p is number of points
-        
-        // Get current time
-        auto cur_time = std::chrono::high_resolution_clock::now();
-        
-        // Calculate seconds from the beginning
-        auto cur_millisec = std::chrono::duration_cast<std::chrono::milliseconds>(cur_time - start_time_);
-
-        int i = (cur_millisec.count() / 100) % num_p;
-        cout << i << ' ' << path_->poses.size() << std::endl;
-        std::vector<double> ans;
-        ans.push_back(path_->poses[i].pose.position.x);
-        ans.push_back(path_->poses[i].pose.position.y);
-        ans.push_back(path_->poses[i].pose.orientation.x); // atan2(sin(path_->poses[i].pose.orientation.x), cos(path_->poses[i].pose.orientation.x)) );
-        return ans; 
     }
 };
 

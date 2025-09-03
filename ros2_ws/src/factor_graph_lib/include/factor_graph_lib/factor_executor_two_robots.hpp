@@ -64,14 +64,15 @@ public:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.01;   // kg
+        const double load_mass = 0.015;   // kg
         const double gravity = 9.81; 
         const double mu = 0.3;
         
         const double cable_length1 = 0.20 + sqrt(1.03 * 1.03 - (robot_height1_ - 0.2) * (robot_height1_ - 0.2));
         const double cable_length2 = 0.20 + sqrt(1.03 * 1.03 - (robot_height2_ - 0.2) * (robot_height2_ - 0.2));
 
-
+// cable_length_offset 0.3
+// weight_tether_tension 0.266292
         // VALUES TO TUNE
         // =============================
         // =============================
@@ -81,16 +82,16 @@ public:
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0) ;
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 12.5);// 12.5);
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292);// 12.5);
 
         double cable_stretch_penalty_offset = getd("cable_stretch_penalty_offset", 0.0);
         double tension_slack_penalty_offset = getd("tension_slack_penalty_offset", 0.02); 
-        double tether_tension_offset = getd("tether_tension_offset", 0.021875); 
+        double tether_tension_offset = getd("tether_tension_offset", 0.3 );  //0.021875
         
-        bool have_tension_lower_bound_factor = getb("have_tension_lower_bound_factor", true);
+        bool have_tension_lower_bound_factor = getb("have_tension_lower_bound_factor", false);
         bool have_cable_stretch_factor = getb("have_cable_stretch_factor", false);
-        bool have_tension_slack_penalty_factor = getb("have_tension_slack_penalty_factor", true); 
-        bool have_tether_tension_factor = getb("have_tether_tension_factor", false);
+        bool have_tension_slack_penalty_factor = getb("have_tension_slack_penalty_factor", false); 
+        bool have_tether_tension_factor = getb("have_tether_tension_factor", true);
 
         bool have_trajectory_reference_factor = getb("have_trajectory_reference_factor", true);
 
@@ -153,7 +154,7 @@ public:
                 dynamics_cost
                 ));
 
-            graph.add(RobotsDistanceFactor(symbol_t('x', k), symbol_t('X', k), 0.05, tension_cost));
+            graph.add(RobotsDistanceFactor(symbol_t('x', k), symbol_t('X', k), 0.2, tension_cost));
 
             graph.add(LoadDynamicsTwoRobotsFactor(
                 symbol_t('l', k),
@@ -205,8 +206,8 @@ public:
             }
 
             //Vector2 init_u(0.0, 0.0);
-            //graph.add(PriorFactor<Vector2>(symbol_t('u', k), last_u1_, control_interim_cost));
-            //graph.add(PriorFactor<Vector2>(symbol_t('U', k), last_u2_, control_interim_cost));
+            graph.add(PriorFactor<Vector2>(symbol_t('u', k), Vector2::Zero(), control_interim_cost));
+            graph.add(PriorFactor<Vector2>(symbol_t('U', k), Vector2::Zero(), control_interim_cost));
         }
 
         // --- 3. Create Initial Estimate ---
@@ -225,7 +226,7 @@ public:
             }
         }
 
-        Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, 0.0, 0.0, false, true);
+        Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, 0.0, 0.0, 2, false);
 
         Vector4 last_state = result.at<Vector4>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));

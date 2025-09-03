@@ -60,28 +60,29 @@ public:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.02;   // kg
-        const double inertia = 0.000532;
+        const double load_mass = 0.015;   // kg
+        const double inertia = 0.000399; //399
         const double gravity = 9.81;
         const double mu = 0.3;
         const double mu2 = 0.3;
-        const double cable_length1 = sqrt(1.03 * 1.03 - (robot_height1_) * (robot_height1_));
-        const double cable_length2 = sqrt(1.03 * 1.03 - (robot_height2_) * (robot_height2_));
+        const double cable_length1 = sqrt(1.03 * 1.03 - (robot_height1_ - 0.2) * (robot_height1_ - 0.2));
+        const double cable_length2 = sqrt(1.03 * 1.03 - (robot_height2_ - 0.2) * (robot_height2_ - 0.2));
 
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 0.6); 
+        const int atp2 = 1;  // attachement point of the 2nd drone. Values are 1 or 2 depending on which face of the cube it's attached to
+        const double u_upper_bound = getd("u_upper_bound", 0.5); 
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0) ;
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 0.0008096); //0.0008096
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.0008096
 
         double cable_stretch_penalty_offset = getd("cable_stretch_penalty_offset", 0.0);
         double tension_slack_penalty_offset = getd("tension_slack_penalty_offset", 0.2); 
-        double tether_tension_offset = getd("tether_tension_offset", 0.38672); //0.38672
+        double tether_tension_offset = getd("tether_tension_offset", 0.3); //0.38672
 
         bool have_uk_prior = getb("have_uk_prior", true);
         
@@ -115,7 +116,6 @@ public:
 
         // TENSION
         auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
-        auto tension2_cost = noiseModel::Isotropic::Sigma(1, 1e-4);
         // =============================
         // =============================
 
@@ -162,8 +162,10 @@ public:
                 robot_mass,
                 true,
                 dynamics_cost,
-                2
+                atp2
                 ));
+
+            //graph.add(RobotsDistanceFactor(symbol_t('x', k), symbol_t('X', k), 0.2, tension_cost));
 
             graph.add(LoadDynamicsTwoRobotsWithLoadOrientationFactor(
                 symbol_t('l', k),
@@ -179,6 +181,7 @@ public:
                 gravity,
                 inertia,
                 true,
+                atp2,
                 dynamics_cost_with_angle
                 ));
 
@@ -191,18 +194,18 @@ public:
             // Factor 2: Penalize if ||p_r - p_l|| > cable_length
             if (have_cable_stretch_factor) {
             graph.add(CableStretchPenaltyWithOrientationFactor(symbol_t('x', k), symbol_t('l', k), cable_length1, weight_cable_stretch, tension_cost));
-            graph.add(CableStretchPenaltyWithOrientationFactor(symbol_t('X', k), symbol_t('l', k), cable_length2, weight_cable_stretch, tension_cost, 2));
+            graph.add(CableStretchPenaltyWithOrientationFactor(symbol_t('X', k), symbol_t('l', k), cable_length2, weight_cable_stretch, tension_cost, atp2));
             }
 
             // Factor 3: Penalize if T_k > 0 AND ||p_r - p_l|| < cable_length (i.e., tension in slack cable)
             if (have_tension_slack_penalty_factor) {
             graph.add(TensionSlackPenaltyWithLoadOrientationFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length1, weight_tension_slack, tension_cost));
-            graph.add(TensionSlackPenaltyWithLoadOrientationFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length2, weight_tension_slack, tension_cost, 2));
+            graph.add(TensionSlackPenaltyWithLoadOrientationFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length2, weight_tension_slack, tension_cost, atp2));
             }
 
             if (have_tether_tension_factor) {
             graph.add(TethertensionFactor(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length1 - tether_tension_offset, weight_tether_tension, tension_cost));
-            graph.add(TethertensionFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length2 - tether_tension_offset, weight_tether_tension, tension_cost, 2));
+            graph.add(TethertensionFactor(symbol_t('T', k), symbol_t('X', k), symbol_t('l', k), cable_length2 - tether_tension_offset, weight_tether_tension, tension_cost, atp2));
             }
 
             graph.add(MagnitudeUpperBoundFactor(symbol_t('u', k), u_upper_bound, control_cost));
@@ -238,7 +241,7 @@ public:
             }
         }
 
-        Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, mu2, inertia, true, true);
+        Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, mu2, inertia, 2, true);
 
         Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
@@ -247,8 +250,8 @@ public:
 
         Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
         Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));
-        Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 1));
-        Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 1));
+        Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 0));
+        Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 0));
         Vector1 tension1 = result.at<Vector1>(symbol_t('t', 0));
         Vector1 tension2 = result.at<Vector1>(symbol_t('T', 0));
 
@@ -256,7 +259,7 @@ public:
         cout << "  Cur tension: " << tension1[0] << ' ' << tension2[0] << endl;
         cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
         }
-        return {next_state1[2], next_state1[3], next_state2[2], next_state2[3], tension1[0], tension2[0] };
+        return {next_state1[2], next_state1[3], next_state2[2], next_state2[3], tension1[0], tension2[0], next_ctrl1[0], next_ctrl1[1], next_ctrl2[0], next_ctrl2[1] };
     }
 };
 

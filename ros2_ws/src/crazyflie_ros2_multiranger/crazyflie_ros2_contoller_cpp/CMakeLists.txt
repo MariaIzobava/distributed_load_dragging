@@ -42,6 +42,8 @@ add_executable(mpc_with_orientation src/mpc_with_orientation.cpp)
 add_executable(mpc_two_drones_with_orientation src/mpc_two_drones_with_orientation.cpp)
 add_executable(mpc_multi_drones_with_orientation src/mpc_multi_drone_with_orientation.cpp)
 add_executable(mpc_with_height src/mpc_with_height.cpp)
+add_executable(mpc_multi_drone_with_height src/mpc_multi_drone_with_height.cpp)
+add_executable(mpc_multi_drone_with_height_and_ori src/mpc_multi_drone_with_height_and_ori.cpp)
 
 ament_target_dependencies(
   mpc
@@ -91,6 +93,22 @@ ament_target_dependencies(
   tf2
   factor_graph_lib
 )
+ament_target_dependencies(
+  mpc_multi_drone_with_height
+  rclcpp
+  GTSAM
+  nav_msgs
+  tf2
+  factor_graph_lib
+)
+ament_target_dependencies(
+  mpc_multi_drone_with_height_and_ori
+  rclcpp
+  GTSAM
+  nav_msgs
+  tf2
+  factor_graph_lib
+)
 
 target_link_libraries(mpc
   gtsam
@@ -118,6 +136,16 @@ target_link_libraries(mpc_with_height
   nlohmann_json::nlohmann_json
 )
 target_link_libraries(mpc_multi_drones_with_orientation
+  gtsam
+  gtsam_unstable
+  nlohmann_json::nlohmann_json
+)
+target_link_libraries(mpc_multi_drone_with_height
+  gtsam
+  gtsam_unstable
+  nlohmann_json::nlohmann_json
+)
+target_link_libraries(mpc_multi_drone_with_height_and_ori
   gtsam
   gtsam_unstable
   nlohmann_json::nlohmann_json
@@ -153,6 +181,16 @@ target_include_directories(mpc_multi_drones_with_orientation PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(mpc_multi_drones_with_orientation PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
+target_include_directories(mpc_multi_drone_with_height PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(mpc_multi_drone_with_height PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+target_include_directories(mpc_multi_drone_with_height_and_ori PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(mpc_multi_drone_with_height_and_ori PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
 install(TARGETS mpc
   DESTINATION lib/${PROJECT_NAME})
 install(TARGETS mpc_two_drones
@@ -164,6 +202,10 @@ install(TARGETS mpc_two_drones_with_orientation
 install(TARGETS mpc_with_height
   DESTINATION lib/${PROJECT_NAME})
 install(TARGETS mpc_multi_drones_with_orientation
+  DESTINATION lib/${PROJECT_NAME})
+install(TARGETS mpc_multi_drone_with_height
+  DESTINATION lib/${PROJECT_NAME})
+install(TARGETS mpc_multi_drone_with_height_and_ori
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

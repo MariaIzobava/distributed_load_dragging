@@ -175,7 +175,8 @@ private:
 
         last_u1_<< next_velocity[4], next_velocity[5];
         last_u2_<< next_velocity[6], next_velocity[7];
-        record_metrics(load_position_, {position1_, position2_}, {next_velocity[8], next_velocity[9]}, {1, 2});
+        record_metrics(load_position_, {position1_, position2_}, {next_velocity[8], next_velocity[9]}, {1, 2},
+             {{last_u1_[0], last_u2_[1]}, {last_u2_[0], last_u2_[1]}});
 
         convert_robot_velocity_to_local_frame(
             next_velocity[0], next_velocity[1], desired_height_ - position1_[2], 

@@ -332,6 +332,7 @@ class LoadDynamicsTwoRobotsWithLoadOrientationFactor: public NoiseModelFactor6<V
     double g_;
     double analitical_derivative_;
     double eps_ = 1000000.0;
+    int atp2_;
 
 public:
     LoadDynamicsTwoRobotsWithLoadOrientationFactor(
@@ -348,9 +349,10 @@ public:
         double g, 
         double inertia, 
         bool analitical_derivative, 
+        int atp2,
         const SharedNoiseModel& model) :
         NoiseModelFactor6<Vector6, Vector4, Vector1, Vector4, Vector1, Vector6>(model, key_xl_k, key_xr1_k, key_tension1_k, key_xr2_k, key_tension2_k, key_xl_k_plus_1),
-        dt_(dt), load_mass_(load_mass), mu_(mu), mu2_(mu), inertia_(inertia), g_(g), analitical_derivative_(analitical_derivative) {}
+        dt_(dt), load_mass_(load_mass), mu_(mu), mu2_(mu), inertia_(inertia), g_(g), analitical_derivative_(analitical_derivative), atp2_(atp2) {}
 
 
     Vector evaluateErrorOnly(const Vector6& xl_k, 
@@ -372,7 +374,7 @@ public:
         Vector3 next_pos = pos_k + vel_k * dt_;
 
         CableVectorHelper h1(xr1_k, xl_k);
-        CableVectorHelper h2(xr2_k, xl_k, 2);
+        CableVectorHelper h2(xr2_k, xl_k, atp2_);
 
         Vector2 next_lin_vel = lin_vel_k + dt_ / load_mass_ * (tension1_k(0) * h1.e_norm + tension2_k(0) * h2.e_norm - mu_ * load_mass_ * g_ * normed_vel_k);
 
@@ -381,6 +383,10 @@ public:
 
         double r21 = -0.2 * sin(xl_k(2));
         double r22 = 0.2 * cos(xl_k(2));
+        if (atp2_ == 1) {
+            r21 = r1;
+            r22 = r2;
+        }
 
         Vector1 next_ang_vel(1);
         next_ang_vel(0) = xl_k(5) + dt_ / inertia_ * (r1 * tension1_k(0) * h1.e_norm(1) - r2 * tension1_k(0) * h1.e_norm(0) + r21 * tension2_k(0) * h2.e_norm(1) - r22 * tension2_k(0) * h2.e_norm(0) - mu2_ * load_mass_ * g_ * tanh(eps_ * xl_k(5))); 
@@ -423,7 +429,7 @@ public:
         }
 
         CableVectorHelper h1(xr1_k, xl_k);
-        CableVectorHelper h2(xr2_k, xl_k, 2);
+        CableVectorHelper h2(xr2_k, xl_k, atp2_);
 
         double r1 = -0.2 * cos(xl_k(2));
         double r2 = -0.2 * sin(xl_k(2));
@@ -434,6 +440,12 @@ public:
         double r22 = 0.2 * cos(xl_k(2));
         double r21_dtheta = -0.2 * cos(xl_k(2));
         double r22_dtheta = -0.2 * sin(xl_k(2));
+        if (atp2_ == 1) {
+            r21 = r1;
+            r22 = r2;
+            r21_dtheta = r1_dtheta;
+            r22_dtheta = r2_dtheta;
+        }
         double sech_sq_theta = eps_ * (1.0 / cosh(eps_ * xl_k(5))) * (1.0 / cosh(eps_ * xl_k(5)));
         double A_CNST1 = dt_ / load_mass_ * tension1_k(0);
         double A_CNST2 = dt_ / load_mass_ * tension2_k(0);

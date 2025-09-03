@@ -164,7 +164,8 @@ private:
         // Now the drone is in "pulling" mode, control with MPC
         auto next_velocity = get_next_velocity_();
 
-        record_metrics(load_position_, {position1_, position2_}, {next_velocity[4], next_velocity[5]}, {1, 2});
+        record_metrics(load_position_, {position1_, position2_}, {next_velocity[4], next_velocity[5]}, {1, 2},
+         {{next_velocity[6], next_velocity[7]}, {next_velocity[8], next_velocity[9]}});
 
         convert_robot_velocity_to_local_frame(
             next_velocity[0], next_velocity[1], desired_height_ - position1_[2], 

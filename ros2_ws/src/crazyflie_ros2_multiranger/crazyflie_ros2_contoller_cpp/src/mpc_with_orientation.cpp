@@ -181,7 +181,7 @@ private:
         // First, we're keeping the drone on the same height
         auto next_velocity = get_next_velocity_();
 
-        record_metrics(load_position_, {position_}, {next_velocity[2]}, {1});
+        record_metrics(load_position_, {position_}, {next_velocity[2]}, {1}, {{next_velocity[3], next_velocity[4], 0.0}});
 
         convert_robot_velocity_to_local_frame(
             next_velocity[0], next_velocity[1], desired_height_ - position_[2], 

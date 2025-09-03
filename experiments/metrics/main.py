@@ -40,26 +40,29 @@ def trajectories_graph(df, num_robots):
     plt.savefig('trajectories_3d.png')
 
 
-def drone_velocity_graph(df, num_robots):
+def drone_control_graph(df, num_robots):
+    window_size = 50
     plt.figure(figsize=(12, 8))
     for i in range(1, num_robots + 1):
+        df[f'u{i}_x_smoothed'] = df[f'drone{i}_control_x'].rolling(window=window_size).mean()
+        df[f'u{i}_y_smoothed'] = df[f'drone{i}_control_y'].rolling(window=window_size).mean()
+
         plt.subplot(2, num_robots, i)
-        plt.plot(df['timestamp'].to_numpy(), df[f'drone{i}_velocity_z'].to_numpy(), label=f'Drone {i} Velocity Z')
+        plt.plot(df['timestamp'].to_numpy(), df[f'u{i}_x_smoothed'].to_numpy(), label=f'Drone {i} Control X')
         plt.xlabel('Time (s)')
-        plt.ylabel('Vertical Velocity (Z)')
+        plt.ylabel('Control X')
         plt.grid(True)
         plt.legend()
 
         plt.subplot(2, num_robots, num_robots + i)
-        plt.plot(df['timestamp'].to_numpy(), df[f'drone{i}_velocity_x'].to_numpy(), label=f'Drone {i} Velocity X')
-        plt.plot(df['timestamp'].to_numpy(), df[f'drone{i}_velocity_y'].to_numpy(), label=f'Drone {i} Velocity Y')
+        plt.plot(df['timestamp'].to_numpy(), df[f'u{i}_y_smoothed'].to_numpy(), label=f'Drone {i} Control Y')
         plt.xlabel('Time (s)')
-        plt.ylabel('Horizontal Velocity')
+        plt.ylabel('Control Y')
         plt.grid(True)
         plt.legend()
 
     plt.tight_layout()
-    plt.savefig('drone_velocities.png')
+    plt.savefig('drone_controls.png')
 
 
 def cable_tensions_graph(df, num_robots, load_ori, robot_height):
@@ -90,21 +93,30 @@ def cable_tensions_graph(df, num_robots, load_ori, robot_height):
     plt.tight_layout()
     plt.savefig('cable_tensions.png')
 
-def get_filename(num_robots, load_ori):
-    if (num_robots == 1 and not load_ori):
+def get_filename(num_robots, load_ori, robot_height = False):
+    if (num_robots == 1 and not load_ori and not robot_height):
         return "one_drone_no_ori"
     
-    if (num_robots == 1 and load_ori):
+    if (num_robots == 1 and load_ori and not robot_height):
         return "one_drone_with_ori"
 
-    if (num_robots == 2 and not load_ori):
+    if (num_robots == 2 and not load_ori and not robot_height):
         return "two_drones_no_ori"
 
-    if (num_robots == 2 and load_ori):
-        return "two_drones_with_ori"
+    if (num_robots == 2 and load_ori and not robot_height):
+        return "three_drones_with_ori"
 
-    if (num_robots == 4 and load_ori):
+    if (num_robots == 4 and load_ori and not robot_height):
         return "four_drones_with_ori"
+
+    if (num_robots == 3 and load_ori and not robot_height):
+        return "three_drones_with_ori"
+
+    if (num_robots == 3 and load_ori and robot_height):
+        return "three_drones_with_height_and_ori"
+
+    if (num_robots == 4 and load_ori and robot_height):
+        return "four_drones_with_height_and_ori"
 
     raise ValueError("Unknown combination of parameters")
     
@@ -117,12 +129,12 @@ args = parser.parse_args()
 
 print(f"Calculating metrics for the following config:\n Number of robots: {args.num_robots}\n Load orientation: {args.load_ori}\n Robot height: {args.robot_height}\n")
 
-filename = get_filename(args.num_robots, args.load_ori)
+filename = get_filename(args.num_robots, args.load_ori, args.robot_height)
 df = pd.read_csv( f'/home/maryia/legacy/experiments/metrics/{filename}.csv')
 
 #load_position_error_graph(df)
 trajectories_graph(df, args.num_robots)
-drone_velocity_graph(df, args.num_robots)
+drone_control_graph(df, args.num_robots)
 cable_tensions_graph(df, args.num_robots, args.load_ori, args.robot_height)
 
 plt.show()

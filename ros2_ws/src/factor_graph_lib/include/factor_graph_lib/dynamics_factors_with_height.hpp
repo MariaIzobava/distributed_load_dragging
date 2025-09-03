@@ -88,6 +88,47 @@ public:
 };
 
 
+class RobotsDistanceWithHeightFactor: public NoiseModelFactor2<Vector6, Vector6> {
+    double limit_;
+
+    double smooth_max_zero_(double x, double epsilon) const {
+        return 0.5 * (x + std::sqrt(x*x + epsilon*epsilon));
+    }
+
+public:
+    RobotsDistanceWithHeightFactor(Key key_xr1_k, Key key_xr2_k, double limit, const SharedNoiseModel& model) :
+        NoiseModelFactor2<Vector6, Vector6>(model, key_xr1_k, key_xr2_k), limit_(limit) {}
+
+    Vector evaluateError(const Vector6& xr1_k, const Vector6& xr2_k,
+                        gtsam::OptionalMatrixType H1,
+                        gtsam::OptionalMatrixType H2) const override {
+    
+        Vector3 diff(xr1_k[0] - xr2_k[0], xr1_k[1] - xr2_k[1], xr1_k[2] - xr2_k[2]);
+        double dist = diff.norm();
+
+        double epsilon = 1e-9;
+        double err = smooth_max_zero_(limit_ - dist, epsilon);
+
+        double inner_term = limit_ - dist;
+        double deriv_smooth_max_wrt_inner = 0.5 * (1.0 + inner_term / std::sqrt(inner_term*inner_term + epsilon*epsilon));
+        Vector3 partial_deriv_distance_r1 = -diff / dist; 
+        Vector3 partial_deriv_distance_r2 = diff / dist; 
+
+        if (H1) {
+            *H1 = (gtsam::Matrix(1, 6) << deriv_smooth_max_wrt_inner * partial_deriv_distance_r1(0), deriv_smooth_max_wrt_inner * partial_deriv_distance_r1(1), deriv_smooth_max_wrt_inner * partial_deriv_distance_r1(2), 0, 0, 0
+            ).finished();
+        }
+
+        if (H2) {
+            *H2 = (gtsam::Matrix(1, 6) << deriv_smooth_max_wrt_inner * partial_deriv_distance_r2(0), deriv_smooth_max_wrt_inner * partial_deriv_distance_r2(1), deriv_smooth_max_wrt_inner * partial_deriv_distance_r2(2), 0, 0, 0
+            ).finished();
+        }
+
+        return (Vector(1) << err).finished();
+    }
+};
+
+
 /**
  * Custom factor to model the robot's dynamics.
  * Connects Xr_k, U_k, T_k, Xr_{k+1}
@@ -221,27 +262,42 @@ public:
 
 
         double A_CNST = -dt_ * tension_k(0) / load_mass_;
+        Vector2 MUV = mu_ * normed_vel_k;
 
         if (H1) {
             *H1 = (gtsam::Matrix(4, 4) << 
+                // -1,  0, -dt_, 0,
+                // 0, -1,  0,  -dt_,
+                // A_CNST * h.ex_dxl,  A_CNST * h.ex_dyl, -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
+                // A_CNST * h.ey_dxl,  A_CNST * h.ey_dyl,  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
                 -1,  0, -dt_, 0,
                 0, -1,  0,  -dt_,
-                A_CNST * h.ex_dxl,  A_CNST * h.ex_dyl, -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
-                A_CNST * h.ey_dxl,  A_CNST * h.ey_dyl,  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
+                A_CNST * (h.ex_dxl + MUV(0) * h.ez_dxl),  A_CNST * (h.ex_dyl + MUV(0) * h.ez_dyl), -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
+                A_CNST * (h.ey_dxl + MUV(1) * h.ez_dxl),  A_CNST * (h.ey_dyl + MUV(1) * h.ez_dyl),  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
         }
         if (H2) {
+            // *H2 = (gtsam::Matrix(4, 6) << 
+            //     0,  0, 0, 0, 0,0,
+            //     0, 0,  0,  0,0,0,
+            //     A_CNST * (h.ex_dxr + h.ez_dxr),  A_CNST * (h.ex_dyr + h.ez_dyr), A_CNST * (h.ex_dzr + h.ez_dzr), 0, 0, 0,
+            //     A_CNST * (h.ey_dxr + h.ez_dxr),  A_CNST * (h.ey_dyr + h.ez_dyr), A_CNST * (h.ey_dzr + h.ez_dzr), 0, 0, 0).finished();
             *H2 = (gtsam::Matrix(4, 6) << 
                 0,  0, 0, 0, 0,0,
                 0, 0,  0,  0,0,0,
-                A_CNST * (h.ex_dxr + h.ez_dxr),  A_CNST * (h.ex_dyr + h.ez_dyr), A_CNST * (h.ex_dzr + h.ez_dzr), 0, 0, 0,
-                A_CNST * (h.ey_dxr + h.ez_dxr),  A_CNST * (h.ey_dyr + h.ez_dyr), A_CNST * (h.ey_dzr + h.ez_dzr), 0, 0, 0).finished();
+                A_CNST * (h.ex_dxr + MUV(0) * h.ez_dxr),  A_CNST * (h.ex_dyr + MUV(0) * h.ez_dyr), A_CNST * (h.ex_dzr + MUV(0) * h.ez_dzr), 0, 0, 0,
+                A_CNST * (h.ey_dxr + MUV(1) * h.ez_dxr),  A_CNST * (h.ey_dyr + MUV(1) * h.ez_dyr), A_CNST * (h.ey_dzr + MUV(1) * h.ez_dzr), 0, 0, 0).finished();
         }
         if (H3) {
+            // *H3 = (gtsam::Matrix(4, 1) << 
+            //     0,
+            //     0,
+            //     -(dt_ * h.e3_norm(0) / load_mass_),
+            //     -(dt_ * h.e3_norm(1) / load_mass_)).finished();
             *H3 = (gtsam::Matrix(4, 1) << 
                 0,
                 0,
-                -(dt_ * h.e3_norm(0) / load_mass_),
-                -(dt_ * h.e3_norm(1) / load_mass_)).finished();
+                -(dt_ / load_mass_ * (h.e3_norm(0) + MUV(0) * h.e3_norm(2)) ),
+                -(dt_ / load_mass_ * (h.e3_norm(1) + MUV(1) * h.e3_norm(2)) )).finished();
         }
         if (H4) {
             *H4 = gtsam::Matrix4::Identity();

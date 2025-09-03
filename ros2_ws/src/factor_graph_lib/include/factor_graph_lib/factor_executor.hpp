@@ -238,41 +238,33 @@ protected:
         }
     }
 
-    void printOptimizedTrajectory(const Values& result, double dt, double mu, double load_mass, double gravity, double mu2, double inertia, bool two_bots) const {
+    void printOptimizedTrajectory(const Values& result, double dt, double mu, double load_mass, double gravity, double mu2, double inertia, int num_bots) const {
         int num_time_steps = 20;
         double eps_ = 1000000.0;
         cout << "\nOptimized Trajectory:" << endl;
         Vector6 prev_load;
-        Vector4 prev_robot1, prev_robot2;
-        Vector1 prev_tt1, prev_tt2(0);
+        std::vector<Vector4> prev_robot;
+        std::vector<Vector1> prev_tt;
+        prev_robot.resize(num_bots);
+        prev_tt.resize(num_bots);
         for (int k = 0; k <= num_time_steps; ++k) {
-            Vector4 robot_state1 = result.at<Vector4>(symbol_t('x', k));
-            Vector4 robot_state2(0, 0, 0, 0);
-            if (two_bots) {
-                robot_state2 = result.at<Vector4>(symbol_t('X', k));
-            }
-            Vector6 load_state = result.at<Vector6>(symbol_t('l', k));
             cout << "--- Time Step " << k << " ---" << endl;
-            cout << "  Robot 1 Pos: (" << robot_state1[0] << ", " << robot_state1[1] << ", " << robot_state1[2] << ", " << robot_state1[3] << ")" << endl;
-            if (two_bots) {
-            cout << "  Robot 2 Pos: (" << robot_state2[0] << ", " << robot_state2[1] << ", " << robot_state2[2] << ", " << robot_state2[3] << ")" << endl;
+
+            std::vector<Vector4> robot_state;
+            for (int i = 0; i < num_bots; i++) {
+                Vector4 robot_state1 = result.at<Vector4>(symbol_t(x_[i], k));
+                robot_state.push_back(robot_state1);
+                cout << "  Robot " << i+1 << " Pos: (" << robot_state1[0] << ", " << robot_state1[1] << ", " << robot_state1[2] << ", " << robot_state1[3] << ")" << endl;
             }
+
+            Vector6 load_state = result.at<Vector6>(symbol_t('l', k));
             cout << "  Load  Pos: (" << load_state[0]  << ", " << load_state[1] << ", " << load_state[2] << ", " << load_state[3] << ", " << load_state[4] << ", " << load_state[5] << ")" << endl;
+            
             if (k > 0) {
-                CableVectorHelper h1(prev_robot1, prev_load);
-                CableVectorHelper h2(prev_robot2, prev_load, 2);
-                Vector2 vel_k(2);
-                vel_k << prev_load(3), prev_load(4);
-                double v_norm = vel_k.norm();
-                Vector2 nv = Vector2::Zero();
-                if (v_norm > 1e-12) {
-                    nv << vel_k / v_norm;
-                }
-                double p1 = prev_load[0] + dt * prev_load[3];
-                double p2 = prev_load[1] + dt * prev_load[4];
-                double p3 = prev_load[2] + dt * prev_load[5]; //atan2(sin(prev_load[2] + dt * prev_load[5]), cos(prev_load[2] + dt * prev_load[5]));
-                double v1 = prev_load[3] + dt * (prev_tt1[0]* h1.e_norm(0) + prev_tt2[0]* h2.e_norm(0) - mu * load_mass * gravity * nv(0)) / load_mass;
-                double v2 = prev_load[4] + dt * (prev_tt1[0]* h1.e_norm(1) + prev_tt2[0]* h2.e_norm(1) - mu * load_mass * gravity * nv(1)) / load_mass;
+                std::vector<CableVectorHelper> h;
+                double v1_tensionf = 0;
+                double v2_tensionf = 0;
+                double v3_tensionf = 0;
 
                 double r1 = -0.2 * cos(prev_load(2));
                 double r2 = -0.2 * sin(prev_load(2));
@@ -280,55 +272,59 @@ protected:
                 double r21 = -0.2 * sin(prev_load(2));
                 double r22 = 0.2 * cos(prev_load(2));
 
-                double v3 = prev_load(5) + dt / inertia * (r1 * prev_tt1(0) * h1.e_norm(1) - r2 * prev_tt1(0) * h1.e_norm(0) + r21 * prev_tt2(0) * h2.e_norm(1) - r22 * prev_tt2(0) * h2.e_norm(0) - mu2 * load_mass * gravity * tanh(eps_ * prev_load(5))); 
+                for (int i = 0; i < num_bots; i++) {
+                    CableVectorHelper hh(prev_robot[i], prev_load);
+                    h.push_back(hh);
+                    v1_tensionf += prev_tt[i][0]* hh.e_norm(0);
+                    v2_tensionf += prev_tt[i][0]* hh.e_norm(1);
+                    v3_tensionf += r1 * prev_tt[i](0) * hh.e_norm(1) - r2 * prev_tt[i](0) * hh.e_norm(0);
+                }
+
+                Vector2 vel_k(2);
+                vel_k << prev_load(3), prev_load(4);
+                double v_norm = vel_k.norm();
+                Vector2 nv = Vector2::Zero();
+                if (v_norm > 1e-12) {
+                    nv << vel_k / v_norm;
+                }
+
+                double p1 = prev_load[0] + dt * prev_load[3];
+                double p2 = prev_load[1] + dt * prev_load[4];
+                double p3 = prev_load[2] + dt * prev_load[5]; //atan2(sin(prev_load[2] + dt * prev_load[5]), cos(prev_load[2] + dt * prev_load[5]));
+                double v1 = prev_load[3] + dt * (v1_tensionf - mu * load_mass * gravity * nv(0)) / load_mass;
+                double v2 = prev_load[4] + dt * (v2_tensionf - mu * load_mass * gravity * nv(1)) / load_mass;
+                double v3 = prev_load(5) + dt / inertia * (v3_tensionf - mu2 * load_mass * gravity * tanh(eps_ * prev_load(5))); 
 
                 cout << " Load  Pos2: (" << p1 << ", " << p2 << ", " << p3 << ", " << v1 << ", " << v2 << ", " << v3 << ")" << endl;
-                
-                cout << "E 1: " << h1.e_norm(0) << ' ' << h1.e_norm(1) << " T: " << prev_tt1[0] << endl;
-                if (two_bots) {
-                cout << "E 2: " << h2.e_norm(0) << ' ' << h2.e_norm(1) << " T: " << prev_tt2[0] << endl;
-                }
-                
                 cout << "normed vel: " << nv(0) << ' ' << nv(1) << endl;
-                
-                cout << "Pulling force 1: " << prev_tt1[0]* h1.e_norm(0)  / load_mass << ' '<< prev_tt1[0]* h1.e_norm(1) / load_mass << endl;
-                if (two_bots) {
-                cout << "Pulling force 2: " << prev_tt2[0]* h2.e_norm(0)  / load_mass << ' '<< prev_tt2[0]* h2.e_norm(1) / load_mass << endl;
+
+                for (int i = 0; i < num_bots; i++) {
+                    cout << "E " << i+1 << " : " << h[i].e_norm(0) << ' ' << h[i].e_norm(1) << " T: " << prev_tt[i][0] << endl;
+                    cout << "Pulling force " << i+1 << " : " << prev_tt[i][0]* h[i].e_norm(0)  / load_mass << ' '<< prev_tt[i][0]* h[i].e_norm(1) / load_mass << endl;
+                    cout << "Torque " << i+1 << " : " << r1 * prev_tt[i](0) * h[i].e_norm(1) - r2 * prev_tt[i](0) * h[i].e_norm(0) << endl;
                 }
                 
                 cout << "Friction force: " << -mu * gravity * nv(0) << ' ' << -mu * gravity * nv(1) << endl;
-                
-                cout << "Torque 1: " << r1 * prev_tt1(0) * h1.e_norm(1) - r2 * prev_tt1(0) * h1.e_norm(0) << endl;
-                if (two_bots) {
-                cout << "Torque 2: " <<  r21 * prev_tt2(0) * h2.e_norm(1) - r22 * prev_tt2(0) * h2.e_norm(0) << endl; 
-                }
-                
                 cout << "Friction torque: " << -mu2 * load_mass * gravity * tanh(eps_ * prev_load(5)) << endl;
             }
             prev_load = load_state;
-            prev_robot1 = robot_state1;
-            prev_robot2 = robot_state2;
+            for (int i = 0; i < num_bots; i++) {
+                prev_robot[i] = robot_state[i];
+            }
             
             if (k < num_time_steps) {
-                Vector2 control = result.at<Vector2>(symbol_t('u', k));
-                cout << "  Control:   (" << control[0] << ", " << control[1] << ")" << endl;
-                Vector1 tension = result.at<Vector1>(symbol_t('t', k));
-                cout << "  Tension:   (" << tension[0] << ")" << endl;
-                prev_tt1 = tension;
-
-                if (two_bots) {
-                    Vector2 control2 = result.at<Vector2>(symbol_t('U', k));
-                    cout << "  Control 2:   (" << control2[0] << ", " << control2[1] << ")" << endl;
-                    Vector1 tension2 = result.at<Vector1>(symbol_t('T', k));
-                    cout << "  Tension 2:   (" << tension2[0] << ")" << endl;
-                    prev_tt2 = tension2;
+                for (int i = 0; i < num_bots; i++) {
+                    Vector2 control = result.at<Vector2>(symbol_t(u_[i], k));
+                    cout << "  Control "<<  i+1 << " :   (" << control[0] << ", " << control[1] << ")" << endl;
+                    Vector1 tension = result.at<Vector1>(symbol_t(t_[i], k));
+                    cout << "  Tension "<< i+1 << " :   (" << tension[0] << ")" << endl;
+                    prev_tt[i] = tension;
                 }
             }
-            CableVectorHelper h1(robot_state1, load_state);
-            CableVectorHelper h2(robot_state2, load_state, 2);
-            cout << "  Dist 1: " << sqrt((robot_state1[0] - h1.ap_x) * (robot_state1[0] - h1.ap_x)  + (robot_state1[1] - h1.ap_y) * (robot_state1[1] - h1.ap_y) ) << endl;
-            if (two_bots){
-            cout << "  Dist 2: " << sqrt((robot_state2[0] - h2.ap_x) * (robot_state2[0] - h2.ap_x)  + (robot_state2[1] - h2.ap_y) * (robot_state2[1] - h2.ap_y) ) << endl;
+            for (int i = 0; i < num_bots; i++) {
+                CableVectorHelper h1(robot_state[i], load_state);
+                cout << "  Dist "<< i+1 << " : " << sqrt((robot_state[i][0] - h1.ap_x) * (robot_state[i][0] - h1.ap_x)  + (robot_state[i][1] - h1.ap_y) * (robot_state[i][1] - h1.ap_y) ) << endl;
+
             }
         }
     }
@@ -411,7 +407,7 @@ protected:
         NonlinearFactorGraph& graph, 
         const Values& initial_values, 
         map<string, double>& factor_errors,
-        double dt, double mu, double load_mass, double gravity, double mu2, double inertia, bool with_angle = false, bool two_robots = false) const {
+        double dt, double mu, double load_mass, double gravity, double mu2, double inertia, int num_robots, bool with_angle = false) const {
 
         if (debug_mode == "one_of") {
             analyzeJacobianRank(graph, initial_values);
@@ -442,9 +438,9 @@ protected:
 
         if (debug_mode == "one_of") {
             if (with_angle) {
-                printOptimizedTrajectory(result, dt, mu, load_mass, gravity, mu2, inertia, two_robots);
+                printOptimizedTrajectory(result, dt, mu, load_mass, gravity, mu2, inertia, num_robots);
             } else {
-                printOptimizedTrajectory(result, dt, mu, load_mass, gravity, two_robots);
+                printOptimizedTrajectory(result, dt, mu, load_mass, gravity, (num_robots > 1));
             }
         }
 
@@ -467,6 +463,10 @@ protected:
         }
         return tune_b_.at(field);
     }
+
+    static inline const char x_[] = "xXzZ";
+    static inline const char t_[] = "tTdD";
+    static inline const char u_[] = "uUyY";
 
 public:
     virtual std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const = 0;

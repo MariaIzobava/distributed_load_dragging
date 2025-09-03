@@ -23,12 +23,21 @@ export GZ_SIM_RESOURCE_PATH="$PWD/src/ros_gz_crazyflie/ros_gz_crazyflie_gazebo/m
 
 ### Simulation
 ```
-ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc:=True
-ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_with_height:=True
-ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_with_ori:=True
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc:=True one_robot:=True
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_with_height:=True one_robot:=True
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_with_ori:=True one_robot:=True
+
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_two_robots:=True two_robots:=True
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_two_robots_with_ori:=True two_robots:=True
-ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_four_robots_with_ori:=True four_robots:=True
+
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_ori:=True four_robots:=True robot_num:=4
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_ori:=True three_robots:=True robot_num:=3
+
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_height:=True one_robot:=True robot_num:=1
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_height:=True two_robots:=True robot_num:=2
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_height:=True three_robots:=True robot_num:=3
+
+ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_height_and_ori:=True one_robot:=True robot_num:=1
 ```
 
 ### Real

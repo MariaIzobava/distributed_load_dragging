@@ -30,6 +30,8 @@
 // #include "factor_graph_lib/dynamics_factors.hpp"
 #include "factor_graph_lib/factor_executor_factory.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -224,12 +226,12 @@ bool compareTuneResultsByPosError(const std::vector<TuneResult>& a, const std::v
 bool compareTuneResultsByLoadDynError(const std::vector<TuneResult>& a, const std::vector<TuneResult>& b) {
     double kal = 0.0, kbl = 0.0;
     for (int i = 0; i < a.size(); i++) {
-        kal += a[i].factor_errors.at("[l, x, t, X, T, l]"); //"[l, x, t, l]"
-        kbl += b[i].factor_errors.at("[l, x, t, X, T, l]");
+        kal += a[i].factor_errors.at("[l, x, t, l]"); //"[l, x, t, l]"
+        kbl += b[i].factor_errors.at("[l, x, t, l]"); // "[l, x, t, X, T, l]"
     }
     kal /= a.size();
     kbl /= a.size();
-    return (kal > kbl);
+    return (kal < kbl);
 }
 
 void printTuneResult(const std::vector<std::vector<TuneResult> >& results, int num = 20, bool outfile = false) {
@@ -239,13 +241,13 @@ void printTuneResult(const std::vector<std::vector<TuneResult> >& results, int n
     if (outfile) {
         std::cout.rdbuf(outputFile.rdbuf());
     }
-    int k = 0;
-    for (const auto& ts : results) {
+    for (int i = min(num, int(results.size())) - 1; i >= 0; i--) {
+        const auto& ts = results[i];
         double sum = 0.0;
         double load_err = 0.0;
         for (const auto& t: ts) {
             sum += t.pos_error;
-            load_err += t.factor_errors.at("[l, x, t, X, T, l]");
+            load_err += t.factor_errors.at("[l, x, t, l]");
             //cout << t.factor_errors.at("[l, x, t, X, T, l]") << endl;
         }
         for (const auto& [k, v] : ts[0].tune_d) {
@@ -258,9 +260,6 @@ void printTuneResult(const std::vector<std::vector<TuneResult> >& results, int n
         cout << " Position mean: " << sum / ts.size() << endl;
         cout << " Load error mean: " << load_err / ts.size() << endl;
         cout << "\n=======================\n";
-
-        k++;
-        if (k >= num) break;
     }
 
     outputFile.close();
@@ -351,14 +350,21 @@ std::vector<OneRobotNoOriSpec> one_robot_no_ori = {
 // [mpc-6] Next tension: 1.05189e-07
 // [mpc-6] 12 124
 OneRobotNoOriSpec(
-        Vector4(0.200014, -1.38762e-05, 0, 0),
-        Vector4(-0.971287, -0.000890108, 0.00627227, -3.6729e-05),
-        Vector4(-0.0345558, 0.000298548, 0, 0),
-        0.50252,
+        Vector4(0.200012, -1.31332e-05, 0, 0),
+        Vector4(-0.961359, -0.000971152, 0.0121107, -7.58946e-05),
+        Vector4(0.101013, -1.31332e-05, 0, 0),
+        0.454193,
         Vector2(0.0, 0.0)
     ),
 
 };
+
+// Cur load position: 0.200012, -1.31332e-05, 0, 0
+// [mpc-6] Cur robot position: -0.961359, -0.000971152, 0.0121107, -7.58946e-05
+// [mpc-6] Cur robot height: 0.454193
+// [mpc-6] Next load position: -0.0691013, 0.0011941
+// [mpc-6]   Cable length: 1.187
+
 
 
 struct OneRobotWithOriSpec{
@@ -691,6 +697,7 @@ int main(int argc, char** argv) {
     bool WITH_ANGLE = false;
     bool TWO_ROBOTS = false;
     bool WITH_HEIGHT = false;
+    bool THREE_ROBOTS = true;
     string MODE = "one_of"; // "auto" or "one_of"
     int K = 0;
 
@@ -701,10 +708,10 @@ int main(int argc, char** argv) {
 
     std::vector<std::vector<TuneResult> > results;
 
-    if (!WITH_ANGLE && !TWO_ROBOTS && !WITH_HEIGHT) {
+    if (!WITH_ANGLE && !TWO_ROBOTS && !WITH_HEIGHT && !THREE_ROBOTS) {
 
         json tuneData = get_initial_params(MODE, ONE_ROBOT_NO_ORI_PARAMS, tune_d, tune_b);
-        auto points = one_robot_no_ori; //getOneRobotNoOriSpec();
+        auto points = getOneRobotNoOriSpec();
         cout << "Num of points: " << points.size() << endl;
 
         while (true) {
@@ -721,16 +728,16 @@ int main(int argc, char** argv) {
                 K++;
                 if (K % 1000 == 0) {
                     cout << K << endl;
-                    std::sort(results.begin(), results.end(), compareTuneResultsByPosError);
+                    std::sort(results.begin(), results.end(), compareTuneResultsByLoadDynError);
                     cout << "sorted: " << results.size() << endl;
-                    printTuneResult(results, 1000);
+                    printTuneResult(results, 50);
                 }
             }
             results.push_back(results_per_params);
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
 
-    } else if (WITH_ANGLE && !TWO_ROBOTS && !WITH_HEIGHT){
+    } else if (WITH_ANGLE && !TWO_ROBOTS && !WITH_HEIGHT && !THREE_ROBOTS){
 
         json tuneData = get_initial_params(MODE, ONE_ROBOT_WITH_ORI_PARAMS, tune_d, tune_b);
         auto points = getOneRobotWithOriSpec();
@@ -758,7 +765,7 @@ int main(int argc, char** argv) {
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
 
-    } else if (TWO_ROBOTS && !WITH_ANGLE && !WITH_HEIGHT) {
+    } else if (TWO_ROBOTS && !WITH_ANGLE && !WITH_HEIGHT && !THREE_ROBOTS) {
 
         json tuneData = get_initial_params(MODE, TWO_ROBOTS_NO_ORI_PARAMS, tune_d, tune_b);
         auto points = get_two_robots_no_ori_points();
@@ -797,7 +804,7 @@ int main(int argc, char** argv) {
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
 
-    } else if (TWO_ROBOTS && WITH_ANGLE && !WITH_HEIGHT) {
+    } else if (TWO_ROBOTS && WITH_ANGLE && !WITH_HEIGHT && !THREE_ROBOTS) {
 
         json tuneData = get_initial_params(MODE, TWO_ROBOTS_WITH_ORI_PARAMS, tune_d, tune_b);
         auto points = get_two_robots_with_ori_points();
@@ -831,7 +838,7 @@ int main(int argc, char** argv) {
             results.push_back(results_per_params);
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
-    } else {
+    } else if (WITH_HEIGHT && !THREE_ROBOTS) {
         
         json tuneData = get_initial_params(MODE, "", tune_d, tune_b);
         auto points = one_robot_with_height;
@@ -865,12 +872,34 @@ int main(int argc, char** argv) {
             results.push_back(results_per_params);
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
+    } else {
+//         Cur load position: 0.200014, -1.38803e-05, 3.47131e-05, 0, 0, 0
+// [mpc_multi_drones_with_orientation-8] Cur robot 1 position: -0.971478, -0.000885069, 0.00380496, -0.000155451
+// [mpc_multi_drones_with_orientation-8] Height: 0.502425
+// [mpc_multi_drones_with_orientation-8] Cur robot 2 position: -0.68447, 0.684448, 0.000665602, -0.000748444
+// [mpc_multi_drones_with_orientation-8] Height: 0.489528
+// [mpc_multi_drones_with_orientation-8] Cur robot 3 position: -0.686952, -0.685664, 0.00151768, 0.00165828
+// [mpc_multi_drones_with_orientation-8] Height: 0.488682
+// [mpc_multi_drones_with_orientation-8] Next load position: -0.0314146, 0.000246735, -0.015708
+
+        Vector6 initial_load_state(0.200014, -1.38803e-05, 3.47131e-05, 0, 0, 0);
+        Vector4 r1(-0.971478, -0.000885069, 0.00380496, -0.000155451);
+        Vector4 r2(-0.68447, 0.684448, 0.000665602, -0.000748444);
+        Vector4 r3(-0.686952, -0.685664, 0.00151768, 0.00165828);
+        Vector6 lg(-0.0314146, 0.000246735, -0.015708, 0, 0, 0);
+
+        auto executor = FactorExecutorFactory::create(
+            MODE, 3,
+            initial_load_state, 
+            {r1, r2, r3}, lg, {0.502425, 0.489528, 0.488682},
+            tune_d, tune_b);
+        auto result = executor->run(factor_errors, pos_error);
     }
 
     printSeparator();
     cout << "Total runs: " << K << endl;
  
-    std::sort(results.begin(), results.end(), compareTuneResultsByPosError);
+    std::sort(results.begin(), results.end(), compareTuneResultsByLoadDynError);
     printTuneResult(results, 100000, true);
 
     return 0;

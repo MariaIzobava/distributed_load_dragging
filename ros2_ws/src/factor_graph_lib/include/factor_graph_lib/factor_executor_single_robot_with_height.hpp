@@ -72,16 +72,16 @@ public:
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 0.7);
+        const double u_upper_bound = getd("u_upper_bound", 0.5);
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0); //10
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0);
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 7.5);
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //7.5
         
         double cable_stretch_offset = getd("cable_stretch_offset", 0.001);
-        double cable_length_offset = getd("cable_length_offset", 0.021875); //0.021875); //0.0021875 good enough for 0.001 mass
+        double cable_length_offset = getd("cable_length_offset", 0.3); //0.021875); //0.0021875 good enough for 0.001 mass
          
         bool have_u0_prior = getb("have_u0_prior", true);
         bool have_uk_prior = getb("have_uk_prior", true); 
@@ -96,7 +96,7 @@ public:
         bool have_tension_slack_penalty_factor = getb("have_tension_slack_penalty_factor", false); 
         bool have_tether_tension_factor = getb("have_tether_tension_factor", true);
 
-        bool have_trajectory_reference_factor = getb("have_trajectory_reference_factor", false);
+        bool have_trajectory_reference_factor = getb("have_trajectory_reference_factor", true);
 
 
         // STATE PRIORS TUNED VALUES
@@ -119,7 +119,7 @@ public:
         auto dynamics_robot_cost = noiseModel::Diagonal::Sigmas(
             (Vector(6) << 0.001, 0.001, 0.001, 0.001, 0.001, 0.001).finished());
         auto robot_height_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(6) << 1000.001, 1000.001, 0.001, 1000.001, 1000.001, 1000.001).finished());
+            (Vector(6) << 1000.001, 1000.001, 0.001, 1000.001, 1000.001, 0.01).finished());
         auto dynamics_load_cost = noiseModel::Diagonal::Sigmas(
             (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
 
@@ -146,11 +146,8 @@ public:
         }
 
         if (have_u0_prior) {
-          graph.add(PriorFactor<Vector3>(symbol_t('u', 0), last_u_, control_init_cost));
+          graph.add(PriorFactor<Vector3>(symbol_t('u', 0), Vector3::Zero(), control_init_cost));
         }
-        // if (have_t0_prior) {
-        //     graph.add(PriorFactor<Vector1>(symbol_t('t', 0), last_tension_, tension_prior_cost));
-        // }
 
 
         double xdiff = (final_load_goal_(0) - initial_load_state_(0)) / num_time_steps;
@@ -202,25 +199,23 @@ public:
 
             // Factor 4: Penalise if T_k != k * max(0, distance - cable_length)
             if (have_tether_tension_factor) {
-            graph.add(TethertensionFactorNoOriWithHeight(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), 1.19, weight_tether_tension, tension_cost, "middle"));//1.21865
+            graph.add(TethertensionFactorNoOriWithHeight(symbol_t('t', k), symbol_t('x', k), symbol_t('l', k), cable_length -cable_length_offset , weight_tether_tension, tension_cost, "middle"));//1.21865
             }
            
             if (k > 0 && have_uk_prior) {
-            graph.add(PriorFactor<Vector3>(symbol_t('u', k), last_u_, control_interim_cost));
+            graph.add(PriorFactor<Vector3>(symbol_t('u', k), Vector3::Zero(), control_interim_cost));
             }
-
-            // if (k > 0 && have_tk_prior) {
-            // graph.add(PriorFactor<Vector1>(symbol_t('t', k), last_tension_, tension_interim_cost));
-            // }
 
             graph.add(MagnitudeUpperBoundWithHeightFactor(symbol_t('u', k), u_upper_bound, control_cost));
             graph.add(MagnitudeLowerBoundWithHeightFactor(symbol_t('u', k), u_lower_bound, control_cost));
 
             graph.add(RobotsHeightLowerBoundFactor(symbol_t('x', k+1), 0.3, control_cost));
             graph.add(RobotsHeightUpperBoundFactor(symbol_t('x', k+1), 0.4, control_cost));
-            // Vector6 heightx = initial_robot_state_;
-            // heightx(2) = 0.35;
-            // graph.add(PriorFactor<Vector6>(symbol_t('x', k+1), heightx, robot_height_cost));
+
+            Vector6 heightx = initial_robot_state_;
+            heightx(2) = 0.35;
+            heightx(5) = 0.0;
+            graph.add(PriorFactor<Vector6>(symbol_t('x', k+1), heightx, robot_height_cost));
 
             if (k > 0 && have_trajectory_reference_factor) {
                 Vector4 mid_state(4);

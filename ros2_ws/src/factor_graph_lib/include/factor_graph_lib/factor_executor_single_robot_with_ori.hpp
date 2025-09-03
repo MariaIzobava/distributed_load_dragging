@@ -64,36 +64,35 @@ public:
         // =============================
         // =============================
 
-        const double u_upper_bound = getd("u_upper_bound", 0.4);
+        const double u_upper_bound = getd("u_upper_bound", 0.6);
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0);
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 13);
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //12.5   0.0008096
         
         double cable_stretch_offset = getd("cable_stretch_offset", 0.001);
-        double cable_length_offset = getd("cable_length_offset", -0.0021875); //0.021875); //0.0021875 good enough for 0.001 mass
+        double cable_length_offset = getd("cable_length_offset", 0.3); //0.021875); //0.38672 0.0021875 good enough for 0.001 mass
          
-        bool have_u0_prior = getb("have_u0_prior", false);
-        bool have_uk_prior = getb("have_uk_prior", false); 
+        bool have_uk_prior = getb("have_uk_prior", true); 
         bool have_t0_prior = getb("have_t0_prior", false);
         bool have_tk_prior = getb("have_tk_prior", false);
 
         // Goal prior + tether_tension factor makes the full rank system
         bool have_goal_prior = getb("have_goal_prior", true);
 
-        bool have_tension_lower_bound_factor = getb("have_tension_lower_bound_factor", true);
-        bool have_cable_stretch_factor = getb("have_cable_stretch_factor", true);
-        bool have_tension_slack_penalty_factor = getb("have_tension_slack_penalty_factor", true); 
-        bool have_tether_tension_factor = getb("have_tether_tension_factor", false);
+        bool have_tension_lower_bound_factor = getb("have_tension_lower_bound_factor", false);
+        bool have_cable_stretch_factor = getb("have_cable_stretch_factor", false);
+        bool have_tension_slack_penalty_factor = getb("have_tension_slack_penalty_factor", false); 
+        bool have_tether_tension_factor = getb("have_tether_tension_factor", true);
 
         bool have_trajectory_reference_factor = getb("have_trajectory_reference_factor", true);
 
         // STATE PRIORS TUNED VALUES
         double goal_cost_v = getd("goal_cost", 0.000005);
         double goal_ori_cost_v = getd("goal_cost", 0.00005);  // 0.00005 the best
-        double control_interim_cost_v = getd("control_interim_cost", 1.0);
+        double control_interim_cost_v = getd("control_interim_cost", 10.0);
         double tension_cost_v = getd("tension_cost", 1e-3); 
 
 
@@ -198,12 +197,10 @@ public:
                 mid_state << initial_load_state_ + k * diff;
                 graph.add(PriorFactor<Vector6>(symbol_t('l', k), mid_state, interim_goal_with_angle_cost));
             }
-
-            // Vector1 init_t(0.003);
-            // graph.add(PriorFactor<Vector1>(symbol_t('t', k), init_t, tension_cost));
-
-            // Vector2 init_u(-20.0, 20.0);
-            // graph.add(PriorFactor<Vector2>(symbol_t('u', k), init_u, control_interim_cost));
+        
+            if (have_uk_prior) {
+            graph.add(PriorFactor<Vector2>(symbol_t('u', k), Vector2::Zero(), control_interim_cost));
+            }
         }
 
         // --- 3. Create Initial Estimate ---
@@ -219,7 +216,7 @@ public:
             }
         }
 
-        Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, mu2, inertia);
+        Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, mu2, inertia, 1, true);
 
         Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
@@ -227,14 +224,14 @@ public:
         pos_error = a1 / a2;
 
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
-        Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 1));
+        Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 0));
         Vector1 cur_t = result.at<Vector1>(symbol_t('t', 0));
 
         if (debug_mode_ == "one_of" || debug_mode_ == "sim") {
         cout << " Cur tension: " << cur_t[0] << endl;
         cout << "Next control: " << next_ctrl[0] << ", " << next_ctrl[1] << endl;
         }
-        return {next_state[2], next_state[3], cur_t[0]};
+        return {next_state[2], next_state[3], cur_t[0], next_ctrl[0], next_ctrl[1]};
     }
 };
 

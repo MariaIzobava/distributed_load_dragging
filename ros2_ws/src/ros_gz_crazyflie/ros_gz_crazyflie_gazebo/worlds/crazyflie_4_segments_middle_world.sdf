@@ -14,7 +14,7 @@ Copyright (c) 2022 Bitcraze
 <sdf version="1.6">
   <world name="crazyflie_world">
     <physics name="1ms" type="ignored">
-      <max_step_size>0.001</max_step_size>
+      <max_step_size>0.0005</max_step_size>
       <real_time_factor>1.0</real_time_factor>
     </physics>
     <plugin
@@ -75,33 +75,63 @@ Copyright (c) 2022 Bitcraze
         </visual>
       </link>
     </model>
+    
 
     <include>
       <uri>model://load_small</uri>
       <name>the_load</name>
       <pose>0.2 0 0 0 0 0</pose>
-      <!-- <pose>0.16 0 0 0 0 0</pose> -->
     </include>
 
-    <!-- cable length: 0.99 -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
 
     <include>
-      <uri>model://segment_large</uri>
-      <name>segment_2</name>
-      <pose>-0.24 0 0.1 0 -0.41 0</pose>
+      <uri>model://segment_middle</uri>
+      <name>segment_4</name>
+      <pose>-0.075 0 0.1 0 -0.927 0</pose>
     </include>
 
-    <joint name="cable_2_to_load" type="ball">
-      <pose relative_to='segment_2::segment_end'>0 0 0 0 0 0</pose>
+    <joint name="cable_1_to_load" type="ball">
+      <pose relative_to='segment_4::segment_end'>0 0 0 0 0 0</pose>
       <parent>the_load::x_middle_hook</parent>
+      <child>segment_4::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://segment_middle</uri>
+      <name>segment_3</name>
+      <pose>-0.275 0 0 0 0 0</pose> 
+    </include>
+
+    <joint name="segment_3_to_4" type="ball">
+      <pose relative_to='segment_3::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_4::segment_start</parent>
+      <child>segment_3::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://segment_middle</uri>
+      <name>segment_2</name>
+      <pose>-0.525 0 0 0 0 0</pose> 
+    </include>
+
+    <joint name="segment_2_to_3" type="ball">
+      <pose relative_to='segment_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_3::segment_start</parent>
       <child>segment_2::segment_end</child>
       <axis><xyz>0 1 0</xyz></axis>
     </joint>
 
     <include>
-      <uri>model://segment_large</uri>
+      <uri>model://segment_middle</uri>
       <name>segment_1</name>
-      <pose>-0.73 0 0 0 0 0</pose> 
+      <pose>-0.775 0 0 0 0 0</pose> 
     </include>
 
     <joint name="segment_1_to_2" type="ball">
@@ -114,8 +144,7 @@ Copyright (c) 2022 Bitcraze
     <include>
       <uri>model://crazyflie_01</uri>
       <name>crazyflie_01</name>
-      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
-      <pose>-0.99 0 0 0 0 0</pose>
+      <pose>-0.9 0 0 0 0 0</pose>
     </include>
 
     <joint name="drone_to_cable_01" type="ball">
@@ -125,6 +154,5 @@ Copyright (c) 2022 Bitcraze
       <axis><xyz>0 1 0</xyz></axis>
     </joint>
 
-    
   </world>
 </sdf>

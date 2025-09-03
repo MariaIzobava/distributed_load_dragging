@@ -40,6 +40,11 @@ def generate_launch_description():
         default_value='false'
     )
 
+    three_drones_arg = DeclareLaunchArgument(
+        'three_drones',
+        default_value='false'
+    )
+
     four_drones_arg = DeclareLaunchArgument(
         'four_drones',
         default_value='false'
@@ -62,7 +67,18 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_gazebo,
             'worlds',
-            'four_crazyflies_world.sdf -r'
+            'four_crazyflies_2_segments_middle_world.sdf -r'
+        ])}.items()
+    )
+    gz_sim_three_drones = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')),
+        condition=IfCondition(LaunchConfiguration('three_drones')),
+        launch_arguments={'gz_args': PathJoinSubstitution([
+            pkg_project_gazebo,
+            'worlds',
+            #'three_crazyflies_2_segments_middle_world.sdf -r'
+            'three_crazyflies_4_segments_middle_world.sdf -r'
         ])}.items()
     )
     gz_sim_two_drones = IncludeLaunchDescription(
@@ -72,10 +88,13 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_gazebo,
             'worlds',
-            #'two_crazyflies_with_less_segments_world.sdf -r'
-            #'two_crazyflies_with_load_world.sdf -r'
-            #'two_crazyflies_2_segments_at_angle_world.sdf -r'
-            'two_crazyflies_2_segments_in_the_middle_world.sdf -r'
+            #'two_crazyflies_10_segments_bottom_world.sdf -r'
+            #'two_crazyflies_4_segments_middle_world.sdf -r'
+            #'two_crazyflies_2_segments_bottom_world.sdf -r'
+            #'two_crazyflies_2_segments_bottom_at_angle_world.sdf -r'
+            #'two_crazyflies_2_segments_middle_world.sdf -r'
+            #'two_crazyflies_2_segments_middle_same_atp_world.sdf -r'
+            'two_crazyflies_4_segments_middle_same_atp_world.sdf -r'
         ])}.items()
     )
     gz_sim_one_drone = IncludeLaunchDescription(
@@ -85,10 +104,11 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_gazebo,
             'worlds',
-            #'crazyflie_with_load_world.sdf -r'
-            #'crazyflie_with_load_many_segments_world.sdf -r'
-            'crazyflie_with_load_in_the_middle_world.sdf -r'
-            #'crazyflie_on_the_side_world.sdf -r'
+            #'crazyflie_10_segments_bottom_world.sdf -r'
+            #'crazyflie_4_segments_middle_world.sdf -r'
+            #'crazyflie_2_segments_bottom_world.sdf -r'
+            #'crazyflie_2_segments_middle_atp2_world.sdf -r'
+            'crazyflie_2_segments_middle_world.sdf -r'
         ])}.items()
     )
 
@@ -101,6 +121,17 @@ def generate_launch_description():
 
         output='screen',
         condition=IfCondition(LaunchConfiguration('four_drones'))
+    )
+
+    bridge_three_drones = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        parameters=[{
+            'config_file': os.path.join(pkg_project_bringup, 'config', 'ros_gz_three_crazyflies_bridge.yaml'),
+        }],
+
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('three_drones'))
     )
 
     bridge_two_drones = Node(
@@ -125,20 +156,6 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('one_drone'))
     )
 
-    # control = Node(
-    #     package='ros_gz_crazyflie_control',
-    #     executable='control_services',
-    #     output='screen',
-    #     parameters=[
-    #         {'hover_height': 0.2},
-    #         {'robot_prefix': '/crazyflie'},
-    #         {'incoming_twist_topic': '/cmd_vel'},
-    #         {'max_ang_z_rate': 0.4},
-    #     ],
-    #     condition=UnlessCondition(LaunchConfiguration('two_drones'))
-    # )
-
-
     control_01 = Node(
         package='ros_gz_crazyflie_control',
         executable='control_services',
@@ -148,8 +165,7 @@ def generate_launch_description():
             {'robot_prefix': '/crazyflie_01'},
             {'incoming_twist_topic': '/cmd_vel_01'},
             {'max_ang_z_rate': 0.4},
-        ] #,
-        #condition=IfCondition(LaunchConfiguration('two_drones'))
+        ]
     )
 
     control_02 = Node(
@@ -162,21 +178,22 @@ def generate_launch_description():
             {'incoming_twist_topic': '/cmd_vel_02'},
             {'max_ang_z_rate': 0.4},
         ],
-        condition=IfCondition(LaunchConfiguration('two_drones'))
+        condition=UnlessCondition(LaunchConfiguration('one_drone'))
     )
 
-    control_042 = Node(
+    control_033 = Node(
         package='ros_gz_crazyflie_control',
         executable='control_services',
         output='screen',
         parameters=[
             {'hover_height': 0.2},
-            {'robot_prefix': '/crazyflie_02'},
-            {'incoming_twist_topic': '/cmd_vel_02'},
+            {'robot_prefix': '/crazyflie_03'},
+            {'incoming_twist_topic': '/cmd_vel_03'},
             {'max_ang_z_rate': 0.4},
         ],
-        condition=IfCondition(LaunchConfiguration('four_drones'))
+        condition=IfCondition(LaunchConfiguration('three_drones'))
     )
+
     control_043 = Node(
         package='ros_gz_crazyflie_control',
         executable='control_services',
@@ -203,18 +220,22 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        one_drone_arg,
         two_drones_arg,
+        three_drones_arg,
+        four_drones_arg,
         gz_ln_arg,
+        gz_sim_four_drones,
+        gz_sim_three_drones,
         gz_sim_two_drones,
         gz_sim_one_drone,
-        gz_sim_four_drones,
         bridge_four_drones,
+        bridge_three_drones,
         bridge_two_drones,
         bridge_one_drone,
-        #control,
         control_01,
         control_02,
-        control_042,
+        control_033,
         control_043,
         control_044
     ])

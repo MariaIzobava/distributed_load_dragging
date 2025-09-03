@@ -34,3 +34,9 @@
   ros_type_name: "sensor_msgs/msg/LaserScan"
   gz_type_name: "ignition.msgs.LaserScan"
   direction: GZ_TO_ROS
+
+- ros_topic_name: "ft_sensor_topic" # The name of the ROS 2 topic you want
+  gz_topic_name: "/ft_sensor/wrench" # The Gazebo topic name from your SDF file
+  ros_type_name: "geometry_msgs/msg/WrenchStamped"
+  gz_type_name: "gz.msgs.Wrench"
+  direction: GZ_TO_ROS

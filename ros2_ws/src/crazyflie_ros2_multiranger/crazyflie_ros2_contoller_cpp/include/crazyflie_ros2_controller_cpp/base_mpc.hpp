@@ -100,7 +100,8 @@ protected:
     const std::vector<double>& load,
     const std::vector<std::vector<double>>& robots, 
     std::vector<double> tensions,
-    std::vector<int> ap_directions) {
+    std::vector<int> ap_directions,
+    std::vector<std::vector<double>> controls = {}) {
       // Open the file in append mode (std::ios::app)
       std::ofstream file(metrics_file_, std::ios::app);
       if (!file.is_open()) {
@@ -119,8 +120,12 @@ protected:
             row.push_back(robots[i][j]);
         }
         row.push_back(tensions[i]);
+        row.push_back(controls[i][0]);
+        row.push_back(controls[i][1]);
 
         if (load_ori_) {
+          row.push_back(controls[i][2]);
+
           Vector4 robot_state(
             robots[i][0], robots[i][1],
             robots[i][3], robots[i][4]
@@ -201,16 +206,16 @@ private:
 
       // Now construct the required headers
       header_file << "timestamp,actual_load_x,actual_load_y";
-      std::string drone_tmpl = "drone%d_pose_x,drone%d_pose_y,drone%d_pose_z,drone%d_velocity_x,drone%d_velocity_y,drone%d_velocity_z,cable%d_tension";
+      std::string drone_tmpl = "drone%d_pose_x,drone%d_pose_y,drone%d_pose_z,drone%d_velocity_x,drone%d_velocity_y,drone%d_velocity_z,cable%d_tension,drone%d_control_x,drone%d_control_y";
       
       for (int i = 1; i <= num_robots_; i++) {
         char buffer[150];
-        snprintf(buffer, sizeof(buffer), drone_tmpl.c_str(), i, i, i, i, i, i, i);
+        snprintf(buffer, sizeof(buffer), drone_tmpl.c_str(), i, i, i, i, i, i, i, i, i);
         std::string drone_str(buffer);
         header_file << "," << drone_str;
 
         if (load_ori_) {
-          header_file << "," << "attachment_point" << i << "_x,attachment_point" << i << "_y";
+          header_file << ",drone" << i << "_control_z" << "," << "attachment_point" << i << "_x,attachment_point" << i << "_y";
         }
       }
       header_file << std::endl;

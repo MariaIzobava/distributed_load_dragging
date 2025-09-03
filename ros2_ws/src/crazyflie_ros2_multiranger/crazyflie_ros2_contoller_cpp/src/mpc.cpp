@@ -13,6 +13,7 @@
 #include "nav_msgs/msg/path.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 #include <Eigen/Geometry>
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2/LinearMath/Matrix3x3.h"
@@ -77,6 +78,12 @@ public:
           10, // QoS history depth
           std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
 
+        // force_subsc_ = this->create_subscription<geometry_msgs::msg::WrenchStamped>(
+        //     "/ft_sensor_topic",
+        //     10,
+        //     std::bind(&GtsamCppTestNode::force_subscribe_callback, this, std::placeholders::_1)
+        // );
+
         twist_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_01", 10);
         timer_ = this->create_wall_timer(
         std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
@@ -90,6 +97,8 @@ private:
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
     rclcpp::TimerBase::SharedPtr timer_;
 
+    rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr force_subsc_;
+
     std::vector<double> position_;
     std::vector<double> angles_;
     std::vector<double> load_position_;
@@ -101,6 +110,19 @@ private:
 
     bool is_pulling_;
     double desired_height_;
+
+    void force_subscribe_callback(const geometry_msgs::msg::WrenchStamped msg) {
+        Vector2 e(2);
+        e << position_[0] - load_position_[0], position_[1] - load_position_[1];
+        double norm = e.norm();
+        e = e / norm;
+        Vector3 f(3);
+        f << msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z;
+        
+        double t = e(0) * f(0) + e(1) * f(1);
+        cout << "Tension value: " << t << endl;
+        cout << "     Distance: " << norm << " height: " << position_[2] << endl;
+    }
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -144,12 +166,14 @@ private:
             return;
         }
 
-        // Now the drone is in "pulling" mode, control with MPC
+        //new_cmd_msg.linear.x = -0.1;
+
+        //Now the drone is in "pulling" mode, control with MPC
         auto next_velocity = get_next_velocity_();
 
         last_control_ << next_velocity[2], next_velocity[3];
         last_tension_ << next_velocity[4];
-        record_metrics(load_position_, {position_}, {last_tension_[0]}, {});
+        record_metrics(load_position_, {position_}, {last_tension_[0]}, {}, {{last_control_[0], last_control_[1]}});
 
         convert_robot_velocity_to_local_frame(
             next_velocity[0], next_velocity[1], desired_height_ - position_[2], 

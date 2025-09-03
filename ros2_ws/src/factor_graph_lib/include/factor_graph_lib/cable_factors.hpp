@@ -647,4 +647,70 @@ public:
 
 };
 
+
+class TethertensionFactorWithHeight : public NoiseModelFactor3<Vector1, Vector6, Vector6> {
+private:
+    double cable_length_; // The nominal length of the cable
+    double weight_;       // Weight for this factor
+    double k_;
+    string ap_;
+
+    double smooth_max_zero_(double x, double epsilon = 1e-6) const {
+        return 0.5 * (x + std::sqrt(x*x + epsilon*epsilon));
+    }
+
+    Vector2 getAttachementPoint(const Vector6& xl_k) const {
+        Vector2 p(2);
+        p << xl_k(0) - 0.2 * cos(xl_k(2)), xl_k(1) - 0.2 * sin(xl_k(2));
+        return p;
+    }
+
+public:
+    TethertensionFactorWithHeight(Key tensionKey, Key robotPosKey, Key loadPosKey, double cableLength,
+                               double weight, const SharedNoiseModel& model, string ap, int k = 1)
+        : NoiseModelFactor3<Vector1, Vector6, Vector6>(model, tensionKey, robotPosKey, loadPosKey),
+          cable_length_(cableLength), weight_(weight), ap_(ap), k_(k) {}
+
+    Vector evaluateError(const Vector1& T_k, const Vector6& p_r, const Vector6& p_l,
+                         gtsam::OptionalMatrixType H1,
+                         gtsam::OptionalMatrixType H2,
+                         gtsam::OptionalMatrixType H3) const override {
+
+        double pl_z = (ap_ == "bottom") ? 0.0 : 0.2;
+        Vector3 diff(3);
+        Vector2 p = getAttachementPoint(p_l);
+
+        diff << p_r(0) - p(0), p_r(1) - p(1), p_r(2) - pl_z;
+        double distance = diff.norm();
+        
+        double slack_term_val = smooth_max_zero_(distance - cable_length_);
+        
+
+        double error_val = T_k(0) - weight_ * slack_term_val;
+
+        //cout << "TethertensionFactor: " << slack_term_val << ' '<< T_k(0) << ' ' << error_val << endl;
+
+        double inner_term = distance - cable_length_;
+        double deriv_smooth_max_wrt_inner = 0.5 * (1.0 + inner_term / std::sqrt(inner_term*inner_term + 1e-6*1e-6));
+        Vector3 partial_deriv_distance_pr = diff / distance; // unit vector e
+        Vector3 partial_deriv_distance_pl = -diff / distance; // -e vector
+        double partial_deriv_distance_pt = 0.2 / distance * (diff(1) * cos(p_l(2)) - diff(0) * sin(p_l(2)));
+
+        if (H1) { // Jacobian with respect to T_k
+            (*H1) = (Vector(1) << 1).finished();
+        }
+        if (H2) { // Jacobian with respect to p_r
+            // Chain rule: weight * T_k * d(slack_term_val)/d(distance) * d(distance)/dp_r
+            (*H2) = (gtsam::Matrix(1, 6) << -weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pr(0), -weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pr(1), -weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pr(2), 0, 0, 0).finished();
+        }
+        if (H3) { // Jacobian with respect to p_l
+            // Chain rule: weight * T_k * d(slack_term_val)/d(distance) * d(distance)/dp_l
+            (*H3) = (gtsam::Matrix(1, 6) << -weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pl(0), -weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pl(1), -weight_ * deriv_smooth_max_wrt_inner * partial_deriv_distance_pt, 0, 0, 0).finished();
+        }
+
+        return (Vector(1) << error_val).finished();
+    }
+
+};
+
 #endif // CABLE_FACTORS_HPP

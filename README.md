@@ -61,7 +61,7 @@ ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.p
 
 Need to run three commands: detach drone from cable, detach cable from the load and send a command to the MPC controller that there are now 3 drones.
 
-First run the initial command (currently works only with 4 --> drones scenario!):
+First run the initial command (currently works only with 4 --> 3 drones scenario!):
 
 ```
 ros2 launch crazyflie_ros2_multiranger_bringup simple_mapper_simulation.launch.py graph_mpc_multi_robots_with_ori:=True four_robots:=True robot_num:=4
@@ -104,16 +104,25 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 
 ## Code description
 
-* crazyflie_ros2_multiranger - package containing the main control logic with relevant subpackages:
-    - crazyflie_ros2_controller_cpp - various MPC implementations
-    - crazyflie_ros2_multiranger_bringup - launch files
-    - crazyfile_ros2_trajectory_publisher - load trajectory publishers
-* crazyswarm2 - package relevant for real experiments
-* factor_graph_lib - library containing the implementations of all factor graph-related logic. Used my MPC controllers from crazyflie_ros2_controller_cpp.
-* phasespace_motion_capture - package for working with phase space.
-* ros_gz_crazyflie - package for bridging Gazebo and ROS2, contains:
-    - ros_gz_crazyflie_bringup - launch files which launch Gazebo with relevant world files
-    - ros_gz_crazyflie_control - low level Crazyflie controller
-    - ros_gz_crazyflie_gazebo - Gazebo SDF models
+### src/
+
+* `crazyflie_ros2_multiranger` - package containing the main control logic with relevant subpackages:
+    - `crazyflie_ros2_controller_cpp` - various MPC implementations
+    - `crazyflie_ros2_multiranger_bringup` - launch files
+    - `crazyfile_ros2_trajectory_publisher` - load trajectory publishers
+* `crazyswarm2` - package relevant for real experiments
+* `factor_graph_lib` - library containing the implementations of all factor graph-related logic. Used my MPC controllers from `crazyflie_ros2_controller_cpp`.
+* `phasespace_motion_capture` - package for working with phase space.
+* `ros_gz_crazyflie` - package for bridging Gazebo and ROS2, contains:
+    - `ros_gz_crazyflie_bringup` - launch files which launch Gazebo with relevant world files
+    - `ros_gz_crazyflie_control` - low level Crazyflie controller
+    - `ros_gz_crazyflie_gazebo` - Gazebo SDF models
+
+
+### experiments/
+
+* `crazyflie_latency` - tested the latency of the radio signal of the actual crazyflie
+* `factor_graph_one_drone_one_step` - allows both running the tuning logic on many datapoints and to run a single datapoint with extensive logging and debugging info
+* `metrics` - creates the metrics from the data collected during the simulation runs. All the simulation data is written here.
 
  

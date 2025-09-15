@@ -116,6 +116,9 @@ const string TWO_ROBOTS_NO_ORI_PARAMS = "/home/maryia/legacy/experiments/factor_
 const string TWO_ROBOTS_WITH_ORI_POINTS = "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/two_drones_with_ori_points.json";
 const string TWO_ROBOTS_WITH_ORI_PARAMS = "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/two_drones_with_ori_params.json";
 
+const string ONE_ROBOT_WITH_HEIGHT_AND_ORI_POINTS = "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/one_drone_with_height_and_ori_points.json";
+const string ONE_ROBOT_WITH_HEIGHT_AND_ORI_PARAMS = "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/one_drone_with_height_and_ori_params.json";
+
 json read_json_file(string filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
@@ -692,13 +695,50 @@ std::vector<OneRobotWithHeightSpec> one_robot_with_height = {
     )
 };
 
+
+struct OneRobotWithHeightAndOriSpec{
+    Vector6 initial_load_state;
+    std::vector<Vector6> initial_robot_states;
+    Vector6 final_load_goal;
+
+    OneRobotWithHeightAndOriSpec(
+        const Vector6& initial_load_state,
+        const std::vector<Vector6>& initial_robot_states,
+        const Vector6& final_load_goal
+    ) : initial_load_state(initial_load_state),
+        initial_robot_states(initial_robot_states),
+        final_load_goal(final_load_goal) {}
+};
+
+std::vector<OneRobotWithHeightAndOriSpec> get_one_robot_with_height_and_ori_points() {
+    json jsonData = read_json_file(ONE_ROBOT_WITH_HEIGHT_AND_ORI_POINTS);
+
+    std::vector<OneRobotWithHeightAndOriSpec> res = {};
+    std::vector<Vector6> bs;
+    for (const auto& f: jsonData) {
+        Vector6 a(0,0,0,0,0,0);
+        a << f["init_load"][0] ,f["init_load"][1], f["init_load"][2], f["init_load"][3], f["init_load"][4], f["init_load"][5];
+        Vector6 b(0,0,0,0,0,0);
+        b << f["init_robot1"][0] ,f["init_robot1"][1], f["init_robot1"][2], f["init_robot1"][3], f["init_robot1"][4], f["init_robot1"][5];
+        bs.push_back(b);
+        Vector6 c(0,0,0,0,0,0);
+        c << f["goal_load"][0] ,f["goal_load"][1], f["goal_load"][2], f["goal_load"][3], f["goal_load"][4], f["goal_load"][5];
+        
+        res.push_back(OneRobotWithHeightAndOriSpec(a, bs, c));
+    }
+    return res;
+}
+
+
+
 int main(int argc, char** argv) {
 
-    bool WITH_ANGLE = false;
+    bool WITH_ANGLE = true;
     bool TWO_ROBOTS = false;
-    bool WITH_HEIGHT = false;
-    bool THREE_ROBOTS = true;
-    string MODE = "one_of"; // "auto" or "one_of"
+    bool WITH_HEIGHT = true;
+    bool THREE_ROBOTS = false;
+    bool ONE_ROBOT = true;
+    string MODE = "auto"; // "auto" or "one_of"
     int K = 0;
 
     map<string, double> tune_d = {};
@@ -838,10 +878,10 @@ int main(int argc, char** argv) {
             results.push_back(results_per_params);
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
-    } else if (WITH_HEIGHT && !THREE_ROBOTS) {
+    } else if (WITH_ANGLE && WITH_HEIGHT && ONE_ROBOT) {
         
-        json tuneData = get_initial_params(MODE, "", tune_d, tune_b);
-        auto points = one_robot_with_height;
+        json tuneData = get_initial_params(MODE, ONE_ROBOT_WITH_HEIGHT_AND_ORI_PARAMS, tune_d, tune_b);
+        auto points = get_one_robot_with_height_and_ori_points();
         cout << "Num of points: " << points.size() << endl;
 
         while (true) {
@@ -851,11 +891,10 @@ int main(int argc, char** argv) {
             for (const auto& s : points) {
                 auto executor = FactorExecutorFactory::create(
                     MODE, 
+                    1,
                     s.initial_load_state, 
-                    s.initial_robot_state,
-                    s.final_load_goal, 
-                    s.robot_height, 
-                    s.last_u, Vector1::Zero(),
+                    s.initial_robot_states,
+                    s.final_load_goal,
                     tune_d, tune_b);
                 auto result = executor->run(factor_errors, pos_error);
                 results_per_params.push_back({pos_error, factor_errors, tune_d, tune_b});
@@ -865,7 +904,7 @@ int main(int argc, char** argv) {
                 K++;
                 if (K % 1000 == 0) {
                     cout << K << endl;
-                    std::sort(results.begin(), results.end(), compareTuneResultsByPosError);
+                    std::sort(results.begin(), results.end(), compareTuneResultsByLoadDynError);
                     printTuneResult(results, 1000);
                 }
             }
@@ -873,14 +912,14 @@ int main(int argc, char** argv) {
             if (!get_next_params(tuneData, tune_d, tune_b)) break;
         }
     } else {
-//         Cur load position: 0.200014, -1.38803e-05, 3.47131e-05, 0, 0, 0
-// [mpc_multi_drones_with_orientation-8] Cur robot 1 position: -0.971478, -0.000885069, 0.00380496, -0.000155451
-// [mpc_multi_drones_with_orientation-8] Height: 0.502425
-// [mpc_multi_drones_with_orientation-8] Cur robot 2 position: -0.68447, 0.684448, 0.000665602, -0.000748444
-// [mpc_multi_drones_with_orientation-8] Height: 0.489528
-// [mpc_multi_drones_with_orientation-8] Cur robot 3 position: -0.686952, -0.685664, 0.00151768, 0.00165828
-// [mpc_multi_drones_with_orientation-8] Height: 0.488682
-// [mpc_multi_drones_with_orientation-8] Next load position: -0.0314146, 0.000246735, -0.015708
+        //         Cur load position: 0.200014, -1.38803e-05, 3.47131e-05, 0, 0, 0
+        // [mpc_multi_drones_with_orientation-8] Cur robot 1 position: -0.971478, -0.000885069, 0.00380496, -0.000155451
+        // [mpc_multi_drones_with_orientation-8] Height: 0.502425
+        // [mpc_multi_drones_with_orientation-8] Cur robot 2 position: -0.68447, 0.684448, 0.000665602, -0.000748444
+        // [mpc_multi_drones_with_orientation-8] Height: 0.489528
+        // [mpc_multi_drones_with_orientation-8] Cur robot 3 position: -0.686952, -0.685664, 0.00151768, 0.00165828
+        // [mpc_multi_drones_with_orientation-8] Height: 0.488682
+        // [mpc_multi_drones_with_orientation-8] Next load position: -0.0314146, 0.000246735, -0.015708
 
         Vector6 initial_load_state(0.200014, -1.38803e-05, 3.47131e-05, 0, 0, 0);
         Vector4 r1(-0.971478, -0.000885069, 0.00380496, -0.000155451);

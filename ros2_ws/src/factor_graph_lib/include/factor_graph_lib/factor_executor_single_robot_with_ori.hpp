@@ -64,13 +64,13 @@ public:
         // =============================
         // =============================
 
-        const double u_upper_bound = getd("u_upper_bound", 0.6);
+        const double u_upper_bound = getd("u_upper_bound", 0.45); //0.55
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0);
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //12.5   0.0008096
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.266292 for 4 segments
         
         double cable_stretch_offset = getd("cable_stretch_offset", 0.001);
         double cable_length_offset = getd("cable_length_offset", 0.3); //0.021875); //0.38672 0.0021875 good enough for 0.001 mass
@@ -221,7 +221,7 @@ public:
         Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
         Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 0));

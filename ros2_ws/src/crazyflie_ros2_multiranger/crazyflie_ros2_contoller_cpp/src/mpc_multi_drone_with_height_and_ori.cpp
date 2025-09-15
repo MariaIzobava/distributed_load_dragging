@@ -38,8 +38,7 @@ class GtsamCppTestNode : public BaseMpc
 public:
     GtsamCppTestNode() : 
     BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/three_drones_with_height_and_ori.csv", 
-        3, 
+        "/home/maryia/legacy/experiments/metrics/", 
         true, 
         true, 
         "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/one_drone_with_height_and_ori_points.json",
@@ -52,6 +51,7 @@ public:
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
         robot_num_ = this->get_parameter("robot_num").as_int();
+        init_robot_num(robot_num_);
 
         cout << "Registered number of robots: " << robot_num_ << endl;
 
@@ -115,6 +115,7 @@ private:
 
     int is_pulling_, robot_num_;
     double desired_height_;
+    double pos_error_;
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -181,7 +182,9 @@ private:
             controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i + 1]);
             controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i + 2]);
         }
-        record_metrics(load_position_, position_, tensions, ap_directions, controls);
+        std::vector<double> load_pos = {load_position_[0], load_position_[1], load_angles_[2], 
+            load_position_[3], load_position_[4], load_angles_[3]};
+        record_metrics(load_pos, position_, tensions, ap_directions, controls, pos_error_);
 
         for (int i = 0; i < robot_num_; i++) {
             geometry_msgs::msg::Twist new_cmd_msg;
@@ -220,11 +223,8 @@ private:
         // record_datapoint(
         //     {
         //         {"init_load", initial_load_state},
-        //         {"init_robot1", initial_robot1_state},
-        //         {"init_robot2", initial_robot2_state},
+        //         {"init_robot1", initial_robot_states_[0]},
         //         {"goal_load", final_load_goal},
-        //         {"height1" , position1_[2]},
-        //         {"height2" , position2_[2]},
         //     }
         // );
 
@@ -237,8 +237,7 @@ private:
 
         auto executor = FactorExecutorFactory::create("sim", robot_num_, initial_load_state, initial_robot_states_, final_load_goal, {}, {});
         map<string, double> factor_errors = {};
-        double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error);
+        return executor->run(factor_errors, pos_error_);
     }
 };
 

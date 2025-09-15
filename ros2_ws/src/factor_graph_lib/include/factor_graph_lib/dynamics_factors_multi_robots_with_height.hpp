@@ -77,41 +77,42 @@ public:
 
         double A_CNST1 = -dt_ * tension1_k(0) / load_mass_;
         double A_CNST2 = -dt_ * tension2_k(0) / load_mass_;
+        Vector2 MUV = mu_ * normed_vel_k;
 
         if (H1) {
             *H1 = (gtsam::Matrix(4, 4) << 
                 -1,  0, -dt_, 0,
                 0, -1,  0,  -dt_,
-                A_CNST1 * h1.ex_dxl + A_CNST2 * h2.ex_dxl,  A_CNST1 * h1.ex_dyl + A_CNST2 * h2.ex_dyl, -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
-                A_CNST1 * h1.ey_dxl + A_CNST2 * h2.ey_dxl,  A_CNST1 * h1.ey_dyl + A_CNST2 * h2.ey_dyl,  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
+                A_CNST1 * (h1.ex_dxl + MUV(0) * h1.ez_dxl) + A_CNST2 * (h2.ex_dxl + MUV(0) * h2.ez_dxl),  A_CNST1 * (h1.ex_dyl + MUV(0) * h1.ez_dyl) + A_CNST2 * (h2.ex_dyl + MUV(0) * h2.ez_dyl), -1 + dt_ * mu_ * g_ * SEVEN, dt_ * mu_ * g_ * NINE,
+                A_CNST1 * (h1.ey_dxl + MUV(1) * h1.ez_dxl) + A_CNST2 * (h2.ey_dxl + MUV(1) * h2.ez_dxl),  A_CNST1 * (h1.ey_dyl + MUV(1) * h1.ez_dyl) + A_CNST2 * (h2.ey_dyl + MUV(1) * h2.ez_dyl),  dt_ * mu_ * g_ * NINE,  -1 + dt_ * mu_ * g_ * EIGHT).finished();
         }
         if (H2) {
             *H2 = (gtsam::Matrix(4, 6) << 
                 0,  0, 0, 0, 0,0,
                 0, 0,  0,  0,0,0,
-                A_CNST1 * (h1.ex_dxr + h1.ez_dxr),  A_CNST1 * (h1.ex_dyr + h1.ez_dyr), A_CNST1 * (h1.ex_dzr + h1.ez_dzr), 0, 0, 0,
-                A_CNST1 * (h1.ey_dxr + h1.ez_dxr),  A_CNST1 * (h1.ey_dyr + h1.ez_dyr), A_CNST1 * (h1.ey_dzr + h1.ez_dzr), 0, 0, 0).finished();
+                A_CNST1 * (h1.ex_dxr + MUV(0) * h1.ez_dxr),  A_CNST1 * (h1.ex_dyr + MUV(0) * h1.ez_dyr), A_CNST1 * (h1.ex_dzr + MUV(0) * h1.ez_dzr), 0, 0, 0,
+                A_CNST1 * (h1.ey_dxr + MUV(1) * h1.ez_dxr),  A_CNST1 * (h1.ey_dyr + MUV(1) * h1.ez_dyr), A_CNST1 * (h1.ey_dzr + MUV(1) * h1.ez_dzr), 0, 0, 0).finished();
         }
         if (H3) {
             *H3 = (gtsam::Matrix(4, 1) << 
                 0,
                 0,
-                -(dt_ * h1.e3_norm(0) / load_mass_),
-                -(dt_ * h1.e3_norm(1) / load_mass_)).finished();
+                -(dt_ * (h1.e3_norm(0) + MUV(0) * h1.e3_norm(2)) / load_mass_),
+                -(dt_ * (h1.e3_norm(1) + MUV(1) * h1.e3_norm(2)) / load_mass_)).finished();
         }
         if (H4) {
             *H4 = (gtsam::Matrix(4, 6) << 
                 0,  0, 0, 0, 0,0,
                 0, 0,  0,  0,0,0,
-                A_CNST2 * (h2.ex_dxr + h2.ez_dxr),  A_CNST2 * (h2.ex_dyr + h2.ez_dyr), A_CNST2 * (h2.ex_dzr + h2.ez_dzr), 0, 0, 0,
-                A_CNST2 * (h2.ey_dxr + h2.ez_dxr),  A_CNST2 * (h2.ey_dyr + h2.ez_dyr), A_CNST2 * (h2.ey_dzr + h2.ez_dzr), 0, 0, 0).finished();
+                A_CNST2 * (h2.ex_dxr + MUV(0) * h2.ez_dxr),  A_CNST2 * (h2.ex_dyr + MUV(0) * h2.ez_dyr), A_CNST2 * (h2.ex_dzr + MUV(0) * h2.ez_dzr), 0, 0, 0,
+                A_CNST2 * (h2.ey_dxr + MUV(1) * h2.ez_dxr),  A_CNST2 * (h2.ey_dyr + MUV(1) * h2.ez_dyr), A_CNST2 * (h2.ey_dzr + MUV(1) * h2.ez_dzr), 0, 0, 0).finished();
         }
         if (H5) {
             *H5 = (gtsam::Matrix(4, 1) << 
                 0,
                 0,
-                -(dt_ * h2.e3_norm(0) / load_mass_),
-                -(dt_ * h2.e3_norm(1) / load_mass_)).finished();
+                -(dt_ * (h2.e3_norm(0)+ MUV(0) * h2.e3_norm(2)) / load_mass_),
+                -(dt_ * (h2.e3_norm(1)+ MUV(1) * h2.e3_norm(2)) / load_mass_)).finished();
         }
         if (H6) {
             *H6 = gtsam::Matrix4::Identity();

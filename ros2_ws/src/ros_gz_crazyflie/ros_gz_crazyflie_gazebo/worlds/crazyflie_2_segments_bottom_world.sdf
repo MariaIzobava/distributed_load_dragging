@@ -77,7 +77,8 @@ Copyright (c) 2022 Bitcraze
     </model>
 
     <include>
-      <uri>model://load_small</uri>
+      <!-- <uri>model://load_small</uri> -->
+      <uri>model://load_real_0_035_0_01</uri>
       <name>the_load</name>
       <pose>0.2 0 0 0 0 0</pose>
       <!-- <pose>0.16 0 0 0 0 0</pose> -->

@@ -67,16 +67,17 @@ public:
         const double load_mass = 0.015;   // kg
         const double gravity = 9.81; 
         const double mu = 0.3;
-        
-        const double cable_length1 = 0.20 + sqrt(1.03 * 1.03 - (robot_height1_ - 0.2) * (robot_height1_ - 0.2));
-        const double cable_length2 = 0.20 + sqrt(1.03 * 1.03 - (robot_height2_ - 0.2) * (robot_height2_ - 0.2));
+        const double half_size = 0.2;
+        const double real_cable_length = 1.03;
 
-// cable_length_offset 0.3
-// weight_tether_tension 0.266292
+        
+        const double cable_length1 = half_size + sqrt(real_cable_length * real_cable_length - (robot_height1_ - half_size) * (robot_height1_ - half_size));
+        const double cable_length2 = half_size + sqrt(real_cable_length * real_cable_length - (robot_height2_ - half_size) * (robot_height2_ - half_size));
+
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 0.4); 
+        const double u_upper_bound = getd("u_upper_bound", 0.5); 
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
@@ -231,7 +232,7 @@ public:
         Vector4 last_state = result.at<Vector4>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
         Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));

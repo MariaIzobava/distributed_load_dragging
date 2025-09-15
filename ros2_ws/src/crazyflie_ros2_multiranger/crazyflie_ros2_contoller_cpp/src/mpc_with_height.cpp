@@ -39,8 +39,7 @@ class GtsamCppTestNode : public BaseMpc
 public:
     GtsamCppTestNode() : 
     BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/one_drone_with_height.csv", 
-        1, 
+        "/home/maryia/legacy/experiments/metrics/",  
         false, 
         true, 
         "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/one_drone_with_height_points.json",
@@ -49,6 +48,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "MPC with height with GTSAM node has started.");
 
         this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
+        init_robot_num(1);
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
 
@@ -101,6 +101,7 @@ private:
 
     bool is_pulling_;
     double desired_height_;
+    double pos_error_;
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -147,6 +148,8 @@ private:
         // Now the drone is in "pulling" mode, control with MPC
         auto next_velocity = get_next_velocity_();
 
+        record_metrics(load_position_, {position_}, {next_velocity[6]}, {1}, {{next_velocity[3], next_velocity[4], next_velocity[5]}}, pos_error_);
+
         last_control_ << next_velocity[3], next_velocity[4], next_velocity[5];
         last_tension_ << next_velocity[6];
 
@@ -187,7 +190,7 @@ private:
         auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot_state, final_load_goal, position_[2], last_control_, last_tension_, {}, {});
         map<string, double> factor_errors = {};
         double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error);
+        return executor->run(factor_errors, pos_error_);
     }
 };
 

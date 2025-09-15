@@ -12,6 +12,8 @@ find_package(GTSAM REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(factor_graph_lib REQUIRED)
+find_package(phasespace_msgs REQUIRED)
+find_package(motion_capture_tracking_interfaces REQUIRED)
 
 ament_export_include_directories(include)
 
@@ -52,6 +54,8 @@ ament_target_dependencies(
   nav_msgs
   tf2
   factor_graph_lib
+  phasespace_msgs
+  motion_capture_tracking_interfaces
 )
 ament_target_dependencies(
   mpc_two_drones

@@ -39,8 +39,7 @@ class GtsamCppTestNode : public BaseMpc
 public:
     GtsamCppTestNode() : 
     BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/one_drone_with_ori.csv", 
-        1, 
+        "/home/maryia/legacy/experiments/metrics/", 
         true, 
         false, 
         "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/one_drone_with_ori_points.json",
@@ -49,6 +48,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "MPC with load orientation with GTSAM node has started.");
 
         this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
+        init_robot_num(1);
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
 
@@ -96,6 +96,7 @@ private:
 
     bool is_pulling_;
     double desired_height_;
+    double pos_error_;
 
     std::vector<double> get_next_velocity_() {
 
@@ -131,7 +132,7 @@ private:
         auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot_state, final_load_goal, position_[2], {}, {});
         map<string, double> factor_errors = {};
         double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error);
+        return executor->run(factor_errors, pos_error_);
     }
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
@@ -180,8 +181,10 @@ private:
 
         // First, we're keeping the drone on the same height
         auto next_velocity = get_next_velocity_();
+        std::vector<double> load_pos = {load_position_[0], load_position_[1], load_angles_[2], 
+            load_position_[3], load_position_[4], load_angles_[3]};
 
-        record_metrics(load_position_, {position_}, {next_velocity[2]}, {1}, {{next_velocity[3], next_velocity[4], 0.0}});
+        record_metrics(load_pos, {position_}, {next_velocity[2]}, {1}, {{next_velocity[3], next_velocity[4], 0.0}}, pos_error_);
 
         convert_robot_velocity_to_local_frame(
             next_velocity[0], next_velocity[1], desired_height_ - position_[2], 

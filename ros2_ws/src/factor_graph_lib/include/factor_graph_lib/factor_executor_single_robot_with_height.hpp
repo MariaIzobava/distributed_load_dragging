@@ -72,8 +72,8 @@ public:
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 0.5);
-        const double u_lower_bound = getd("u_lower_bound", 0.003);
+        const double u_upper_bound = getd("u_upper_bound", 0.58);
+        const double u_lower_bound = getd("u_lower_bound", 0.23);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0); //10
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0);
@@ -119,7 +119,7 @@ public:
         auto dynamics_robot_cost = noiseModel::Diagonal::Sigmas(
             (Vector(6) << 0.001, 0.001, 0.001, 0.001, 0.001, 0.001).finished());
         auto robot_height_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(6) << 1000.001, 1000.001, 0.001, 1000.001, 1000.001, 0.01).finished());
+            (Vector(6) << 1000.001, 1000.001, 0.0001, 1000.001, 1000.001, 0.01).finished());
         auto dynamics_load_cost = noiseModel::Diagonal::Sigmas(
             (Vector(4) << 0.001, 0.001, 0.001, 0.001).finished());
 
@@ -146,7 +146,8 @@ public:
         }
 
         if (have_u0_prior) {
-          graph.add(PriorFactor<Vector3>(symbol_t('u', 0), Vector3::Zero(), control_init_cost));
+          Vector3 ui(0.0, 0.0, 0.245);
+          graph.add(PriorFactor<Vector3>(symbol_t('u', 0), ui, control_init_cost));
         }
 
 
@@ -203,18 +204,19 @@ public:
             }
            
             if (k > 0 && have_uk_prior) {
-            graph.add(PriorFactor<Vector3>(symbol_t('u', k), Vector3::Zero(), control_interim_cost));
+                Vector3 ui(0.0, 0.0, 0.245);
+            graph.add(PriorFactor<Vector3>(symbol_t('u', k), ui, control_interim_cost));
             }
 
             graph.add(MagnitudeUpperBoundWithHeightFactor(symbol_t('u', k), u_upper_bound, control_cost));
             graph.add(MagnitudeLowerBoundWithHeightFactor(symbol_t('u', k), u_lower_bound, control_cost));
 
-            graph.add(RobotsHeightLowerBoundFactor(symbol_t('x', k+1), 0.3, control_cost));
-            graph.add(RobotsHeightUpperBoundFactor(symbol_t('x', k+1), 0.4, control_cost));
+            graph.add(RobotsHeightLowerBoundFactor(symbol_t('x', k+1), 0.45, control_cost));
+            graph.add(RobotsHeightUpperBoundFactor(symbol_t('x', k+1), 0.55, control_cost));
 
             Vector6 heightx = initial_robot_state_;
-            heightx(2) = 0.35;
-            heightx(5) = 0.0;
+            heightx(2) = 0.5;
+            heightx(5) = 0.5 - initial_robot_state_(2);
             graph.add(PriorFactor<Vector6>(symbol_t('x', k+1), heightx, robot_height_cost));
 
             if (k > 0 && have_trajectory_reference_factor) {
@@ -226,7 +228,7 @@ public:
 
         // --- 3. Create Initial Estimate ---
         Values initial_values;
-        Vector3 init_u(0.0, 0.0, 0.0);
+        Vector3 init_u(0.0, 0.0, 0.245);
         Vector1 init_t(0.0);
         for (int k = 0; k <= num_time_steps; ++k) {
             initial_values.insert(symbol_t('x', k), initial_robot_state_);
@@ -275,7 +277,7 @@ public:
         Vector4 last_state = result.at<Vector4>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         return {next_state[3], next_state[4], next_state[5], next_ctrl[0], next_ctrl[1], next_ctrl[2], next_tension[0]};
     }

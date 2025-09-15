@@ -68,6 +68,7 @@ def generate_launch_description():
             pkg_project_gazebo,
             'worlds',
             'four_crazyflies_2_segments_middle_world.sdf -r'
+            #'four_crazyflies_2_segments_middle_det_world.sdf -r'
         ])}.items()
     )
     gz_sim_three_drones = IncludeLaunchDescription(
@@ -77,8 +78,8 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_gazebo,
             'worlds',
-            #'three_crazyflies_2_segments_middle_world.sdf -r'
-            'three_crazyflies_4_segments_middle_world.sdf -r'
+            'three_crazyflies_2_segments_middle_world.sdf -r'
+            #'three_crazyflies_4_segments_middle_world.sdf -r'
         ])}.items()
     )
     gz_sim_two_drones = IncludeLaunchDescription(
@@ -93,8 +94,8 @@ def generate_launch_description():
             #'two_crazyflies_2_segments_bottom_world.sdf -r'
             #'two_crazyflies_2_segments_bottom_at_angle_world.sdf -r'
             #'two_crazyflies_2_segments_middle_world.sdf -r'
-            #'two_crazyflies_2_segments_middle_same_atp_world.sdf -r'
-            'two_crazyflies_4_segments_middle_same_atp_world.sdf -r'
+            'two_crazyflies_2_segments_middle_same_atp_world.sdf -r'
+            #'two_crazyflies_4_segments_middle_same_atp_world.sdf -r'
         ])}.items()
     )
     gz_sim_one_drone = IncludeLaunchDescription(

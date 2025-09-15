@@ -91,15 +91,15 @@ def generate_launch_description():
         ]
     )
 
-    mpcg_controller = Node(
-        package='crazyflie_ros2_contoller_cpp',
-        executable='mpc',
-        output='screen',
-        parameters=[
-            {'desired_height': 0.7},
-            {'robot_prefix': 'crazyflie_real'},
-        ]
-    )
+    # mpcg_controller = Node(
+    #     package='crazyflie_ros2_contoller_cpp',
+    #     executable='mpc',
+    #     output='screen',
+    #     parameters=[
+    #         {'desired_height': 0.7},
+    #         {'robot_prefix': 'crazyflie_real'},
+    #     ]
+    # )
 
     return LaunchDescription([
         crazyflie_real,
@@ -108,5 +108,5 @@ def generate_launch_description():
         rviz,
         simple_traj_publisher,
         load_path_publisher,
-        mpcg_controller,
+        #mpcg_controller,
         ])

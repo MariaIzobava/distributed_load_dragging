@@ -239,7 +239,7 @@ Copyright (c) 2022 Bitcraze
 
     <joint name="cable4_2_to_load" type="ball">
       <pose relative_to='segment4_2::segment_end'>0 0 0 0 0 0</pose>
-      <parent>the_load::x_middle_hook</parent>
+      <parent>the_load::x_middle_detacheable_hook</parent>
       <child>segment4_2::segment_end</child>
       <axis><xyz>0 1 0</xyz></axis>
     </joint>
@@ -250,6 +250,46 @@ Copyright (c) 2022 Bitcraze
       <pose>-0.6567 0.1767 0 0 0 -0.785</pose> 
     </include>
 
+    <joint name="segment4_1_to_1attp" type="ball">
+      <pose relative_to='seg4_1_attp::segment_start'>0 0 0 0 0 0</pose>
+      <parent>segment4_1::segment_start</parent>
+      <child>seg4_1_attp::segment_start</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+     <include>
+      <uri>model://crazyflie_04</uri>
+      <name>crazyflie_04</name>
+      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
+      <pose>-0.8406 0.3606 0 0 0 0</pose>
+    </include>
+
+    <model name="seg4_1_attp">
+
+    <link name="segment_start">
+        <pose>-0.8406 0.3606 0 0 0 0</pose>
+        <inertial>
+          <mass>1e-9</mass>
+          <inertia>
+            <ixx>1e-9</ixx>
+            <iyy>1e-9</iyy>
+            <izz>1e-9</izz>
+        </inertia>
+        </inertial>
+        <visual name="start_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual>
+        <collision name="start_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision>
+    </link>
+
+    <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+       <parent_link>segment_start</parent_link>
+       <child_model>crazyflie_04</child_model>
+       <joint_name>detached_joint </joint_name>
+       <child_link>hook_link</child_link>
+       <detach_topic>/drone/detach</detach_topic>
+      </plugin>
+    </model>
+
+
     <joint name="segment4_1_to_2" type="ball">
       <pose relative_to='segment4_1::segment_end'>0 0 0 0 0 0</pose>
       <parent>segment4_2::segment_start</parent>
@@ -257,19 +297,14 @@ Copyright (c) 2022 Bitcraze
       <axis><xyz>0 1 0</xyz></axis>
     </joint>
 
-    <include>
-      <uri>model://crazyflie_04</uri>
-      <name>crazyflie_04</name>
-      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
-      <pose>-0.8406 0.3606 0 0 0 0</pose>
-    </include>
+   
 
-    <joint name="drone4_to_cable_01" type="ball">
+    <!-- <joint name="drone4_to_cable_01" type="ball">
       <pose relative_to='crazyflie_04::hook_link'>0 0 0 0 0 0</pose> 
       <parent>segment4_1::segment_start</parent> 
       <child>crazyflie_04::hook_link</child>
       <axis><xyz>0 1 0</xyz></axis>
-    </joint>
+    </joint> -->
 
   </world>
 </sdf>

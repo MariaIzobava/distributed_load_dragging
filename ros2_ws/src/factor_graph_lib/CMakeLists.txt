@@ -12,8 +12,6 @@ include_directories(
 
 # Add the library target
 add_library(${PROJECT_NAME}
-  src/cable_factors.cpp
-  src/control_factors.cpp
   src/dynamics_factors.cpp
 )
 

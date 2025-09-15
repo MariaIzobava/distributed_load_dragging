@@ -58,7 +58,7 @@ public:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.03;   // kg
+        const double load_mass = 0.005;   // kg
         const double gravity = 9.81;
         const double mu = 0.3;
         const double mu2 = 0.3;
@@ -72,17 +72,17 @@ public:
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 0.6); 
+        const double u_upper_bound = getd("u_upper_bound", 0.7); 
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0) ;
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.0008096
+        double weight_tether_tension = getd("weight_tether_tension", 0.366292); //0.0008096
 
         double cable_stretch_penalty_offset = getd("cable_stretch_penalty_offset", 0.0);
         double tension_slack_penalty_offset = getd("tension_slack_penalty_offset", 0.2); 
-        double tether_tension_offset = getd("tether_tension_offset", 0.3); //0.38672
+        double tether_tension_offset = getd("tether_tension_offset", 0.25); //0.38672
 
         bool have_uk_prior = getb("have_uk_prior", true);
         
@@ -103,7 +103,7 @@ public:
         auto goal_cost = noiseModel::Diagonal::Sigmas(
             (Vector(4) << 0.000005, 0.000005, 1000.1, 1000.1).finished());
         auto robot_height_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(6) << 1000.001, 1000.001, 0.0001, 1000.001, 1000.001, 0.1).finished());
+            (Vector(6) << 1000.001, 1000.001, 0.0001, 1000.001, 1000.001, 0.001).finished());
 
         // DYNAMICS
         auto dynamics_robot_cost = noiseModel::Diagonal::Sigmas(
@@ -155,16 +155,16 @@ public:
                     dynamics_robot_cost
                     ));
 
-                // for (int j = i + 1; j < robot_num_; j++) {
-                //     graph.add(RobotsDistanceFactor(symbol_t(x_[i], k), symbol_t(x_[j], k), 0.05, tension_cost));
-                // }
+                for (int j = i + 1; j < robot_num_; j++) {
+                    graph.add(RobotsDistanceWithHeightFactor(symbol_t(x_[i], k), symbol_t(x_[j], k), 0.2, tension_cost));
+                }
 
-                graph.add(RobotsHeightLowerBoundFactor(symbol_t(x_[i], k+1), 0.3, control_cost));
-                graph.add(RobotsHeightUpperBoundFactor(symbol_t(x_[i], k+1), 0.4, control_cost));
+                graph.add(RobotsHeightLowerBoundFactor(symbol_t(x_[i], k+1), 0.45, control_cost));
+                graph.add(RobotsHeightUpperBoundFactor(symbol_t(x_[i], k+1), 0.55, control_cost));
 
                 Vector6 heightx = initial_robot_states_[i];
-                heightx(2) = 0.35;
-                heightx(5) = 0.0;
+                heightx(2) = 0.5;
+                heightx(5) = 0.5 - initial_robot_states_[i][2];
                 graph.add(PriorFactor<Vector6>(symbol_t(x_[i], k+1), heightx, robot_height_cost));
             }
 
@@ -258,7 +258,7 @@ public:
         Vector4 last_state = result.at<Vector4>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         std::vector<double> next_vels;
         for (int i = 0; i < robot_num_; i++) {

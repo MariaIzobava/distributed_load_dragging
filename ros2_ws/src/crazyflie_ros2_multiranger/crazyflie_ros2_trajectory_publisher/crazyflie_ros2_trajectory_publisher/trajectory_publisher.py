@@ -63,8 +63,8 @@ class TrajectoryPublisher(Node):
             pose = PoseStamped()
             pose.header.frame_id = 'odom'
             pose.header.stamp = path_msg.header.stamp
-            pose.pose.position.x = -radius * math.cos(angle)
-            pose.pose.position.y = radius * math.sin(angle) + 2
+            pose.pose.position.x = -radius * math.cos(angle)  # +1 is for real exp
+            pose.pose.position.y = radius * math.sin(angle) + 2# + 0.5 # +0.5 is for real exp
             pose.pose.position.z = 0.0 # Assuming 2D path
             pose.pose.orientation.x = -angle - math.pi / 2.0 # saving orientation
             path_msg.poses.append(pose)
@@ -85,13 +85,16 @@ class TrajectoryPublisher(Node):
         for i in range(cur_points):
             y = step_y * i
             x = math.sin(y)
+            angle = -y
+            if (y >= math.pi):
+                angle = -(2 * math.pi - y)
             pose = PoseStamped()
             pose.header.frame_id = 'odom'
             pose.header.stamp = path_msg.header.stamp
             pose.pose.position.x = -x
             pose.pose.position.y = y
             pose.pose.position.z = 0.0 # Assuming 2D path
-            pose.pose.orientation.x = 0.0 # saving orientation
+            pose.pose.orientation.x = angle # saving orientation
             path_msg.poses.append(pose)
 
         self.publisher_.publish(path_msg)

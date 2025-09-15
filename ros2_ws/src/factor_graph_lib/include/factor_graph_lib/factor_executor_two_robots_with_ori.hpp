@@ -165,7 +165,7 @@ public:
                 atp2
                 ));
 
-            //graph.add(RobotsDistanceFactor(symbol_t('x', k), symbol_t('X', k), 0.2, tension_cost));
+            graph.add(RobotsDistanceFactor(symbol_t('x', k), symbol_t('X', k), 0.1, tension_cost));
 
             graph.add(LoadDynamicsTwoRobotsWithLoadOrientationFactor(
                 symbol_t('l', k),
@@ -246,7 +246,7 @@ public:
         Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
         Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));

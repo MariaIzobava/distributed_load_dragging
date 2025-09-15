@@ -1,0 +1,504 @@
+<?xml version='1.8'?>
+<sdf version='1.8'>
+
+
+<model name="the_load">
+  <link name="box_body">
+    <pose>0.2 0 0.2 0 0 0</pose>
+      <inertial> <!--inertial properties of the link mass, inertia matix-->
+        <mass>0.03</mass>
+        <inertia>
+          <ixx>0.000798</ixx> 
+          <!-- <ixx>0.0000000532</ixx> -->
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000798</iyy>
+          <!-- <iyy>0.0000000798</iyy> -->
+          <iyz>0</iyz>
+          <izz>0.000798</izz>
+          <!-- <izz>0.0000000266</izz> -->
+        </inertia>
+      </inertial>
+      <visual name='visual'>
+        <geometry>
+          <box>
+            <size>0.4 0.4 0.4</size>
+          </box>
+        </geometry>
+          <!--let's add color to our link-->
+          <material>
+            <ambient>0.0 0.0 1.0 1</ambient>
+            <diffuse>0.0 0.0 1.0 1</diffuse>
+            <specular>0.0 0.0 1.0 1</specular>
+          </material>
+      </visual>
+      <collision name='collision'>
+        <geometry>
+          <box>
+            <size>0.4 0.4 0.4</size>
+          </box>
+        </geometry>
+        <surface> 
+          <friction> 
+            <ode>  
+              <mu> 0.3 </mu>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+  <link name="x_hook">
+    <!-- <pose>0 0 0.2 0 0 0</pose>  -->
+    <pose>0 0 0 0 0 0</pose> 
+    <inertial>
+      <!-- <mass>0.000001</mass> -->
+      <mass>0.00001</mass>
+        <inertia>
+          <ixx>1e-9</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-9</iyy>
+          <iyz>0</iyz>
+          <izz>1e-9</izz>
+        </inertia>
+    </inertial>
+    <visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual>
+    <collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision>
+  </link>
+  <joint name="box_to_hook_x_joint" type="fixed">
+    <parent>box_body</parent>
+    <child>x_hook</child>
+  </joint>
+
+  <link name="x_middle_hook">
+    <pose>0 0 0.2 0 0 0</pose> 
+    <inertial>
+      <!-- <mass>0.000001</mass> -->
+      <mass>0.00001</mass>
+        <inertia>
+          <ixx>1e-9</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-9</iyy>
+          <iyz>0</iyz>
+          <izz>1e-9</izz>
+        </inertia>
+    </inertial>
+    <visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual>
+    <collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision>
+  </link>
+  <joint name="box_to_middle_hook_x_joint" type="fixed">
+    <parent>box_body</parent>
+    <child>x_middle_hook</child>
+  </joint>
+
+  <link name="y_hook">
+    <!-- <pose>0 0 0.2 0 0 0</pose>  -->
+    <pose>0.2 0.2 0 0 0 0</pose> 
+    <inertial>
+      <!-- <mass>0.000001</mass> -->
+      <mass>0.00001</mass>
+        <inertia>
+          <ixx>1e-9</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-9</iyy>
+          <iyz>0</iyz>
+          <izz>1e-9</izz>
+        </inertia>
+    </inertial>
+    <visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual>
+    <collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision>
+  </link>
+  <joint name="box_to_hook_y_joint" type="fixed">
+    <parent>box_body</parent>
+    <child>y_hook</child>
+  </joint>
+
+  <link name="y_middle_hook">
+    <pose>0.2 0.2 0.2 0 0 0</pose> 
+    <inertial>
+      <!-- <mass>0.000001</mass> -->
+      <mass>0.00001</mass>
+        <inertia>
+          <ixx>1e-9</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-9</iyy>
+          <iyz>0</iyz>
+          <izz>1e-9</izz>
+        </inertia>
+    </inertial>
+    <visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual>
+    <collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision>
+  </link>
+  <joint name="box_to_middle_hook_y_joint" type="fixed">
+    <parent>box_body</parent>
+    <child>y_middle_hook</child>
+  </joint>
+
+  <plugin
+      filename="gz-sim-odometry-publisher-system"
+      name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>odom</odom_frame>
+      <dimensions>3</dimensions>
+    </plugin>
+
+
+    <model name="segment4_2">
+    <pose>-0.24 0 0.1 0 -0.41 0</pose>
+    <link name="segment_link">
+      <inertial>
+        <mass>0.001</mass>
+        <pose>0 0 0 0 1.5708 0</pose>
+        <inertia>
+            <ixx>1e-7</ixx>
+            <iyy>1e-7</iyy>
+            <izz>1e-7</izz>
+        </inertia>
+      </inertial>
+      <visual name="segment_visual">
+        <pose>0 0 0 0 1.5708 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.002</radius>
+            <length>0.5</length> </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.2 0.2 0.2 1</ambient>
+          <diffuse>0.2 0.2 0.2 1</diffuse>
+          <specular>0.0 0.0 0.0 1</specular>
+          <emissive>0.0 0.0 0.0 1</emissive>
+        </material>
+      </visual>
+    </link>
+    <link name="segment_start">
+        <pose>-0.25 0 0 0 0 0</pose> 
+        <inertial>
+          <mass>1e-9</mass>
+          <inertia>
+            <ixx>1e-9</ixx>
+            <iyy>1e-9</iyy>
+            <izz>1e-9</izz>
+        </inertia>
+        </inertial>
+        <visual name="start_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual>
+        <collision name="start_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision>
+    </link>
+    <joint name="start_joint" type="fixed">
+        <parent>segment_link</parent>
+        <child>segment_start</child>
+    </joint>
+    <link name="segment_end">
+        <pose>0.25 0 0 0 0 0</pose> 
+        <inertial>
+          <mass>1e-9</mass>
+          <inertia>
+            <ixx>1e-9</ixx>
+            <iyy>1e-9</iyy>
+            <izz>1e-9</izz>
+        </inertia>
+        </inertial>
+        <visual name="end_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual>
+        <collision name="end_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision>
+    </link>
+    <joint name="end_joint" type="fixed">
+        <parent>segment_end</parent>
+        <child>segment_link</child>
+    </joint>
+
+    <link name="segment_end2">
+        <pose>0.25 0 0 0 0 0</pose> 
+        <inertial>
+          <mass>1e-9</mass>
+          <inertia>
+            <ixx>1e-9</ixx>
+            <iyy>1e-9</iyy>
+            <izz>1e-9</izz>
+        </inertia>
+        </inertial>
+        <visual name="end_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual>
+        <collision name="end_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision>
+    </link>
+    <joint name="end_joint2" type="ball">
+        <parent>segment_end2</parent>
+        <child>segment_end</child>
+    </joint>
+    </model>
+
+     <!-- <joint name="cable4_2_to_load" type="ball">
+      <pose relative_to='segment4_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>x_middle_hook</parent>
+      <child>segment4_2::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint> -->
+
+
+    <plugin
+      filename="gz-sim-detachable-joint-system"
+      name="gz::sim::systems::DetachableJoint">
+      <parent_link>x_middle_hook</parent_link>
+      <child_model>segment4_2</child_model>
+      <child_link>segment_end2</child_link>
+      <joint_name>cable4_2_to_load</joint_name>
+      <joint_pose relative_to='segment4_2::segment_end2'>0 0 0 0 0 0</joint_pose>
+      <joint_axis>0 1 0</joint_axis>
+      <detach_topic>/model/hoist_assembly/detach/cable4_2_to_load</detach_topic>
+    </plugin>
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment4_1</name>
+      <pose>-0.6567 0.1767 0 0 0 -0.785</pose> 
+    </include>
+
+    <joint name="segment4_1_to_2" type="ball">
+      <pose relative_to='segment4_1::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment4_2::segment_start</parent>
+      <child>segment4_1::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://crazyflie_04</uri>
+      <name>crazyflie_04</name>
+      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
+      <pose>-0.8406 0.3606 0 0 0 0</pose>
+    </include>
+
+    <joint name="drone4_to_cable_01" type="ball">
+      <pose relative_to='crazyflie_04::hook_link'>0 0 0 0 0 0</pose> 
+      <parent>segment4_1::segment_start</parent> 
+      <child>crazyflie_04::hook_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+    <!-- FIRST DRONE -->
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment_2</name>
+      <pose>-0.24 0 0.1 0 -0.41 0</pose>
+    </include>
+
+    <joint name="cable_2_to_load" type="ball">
+      <pose relative_to='segment_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>x_middle_hook</parent>
+      <child>segment_2::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment_1</name>
+      <pose>-0.73 0 0 0 0 0</pose> 
+    </include>
+
+    <joint name="segment_1_to_2" type="ball">
+      <pose relative_to='segment_1::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment_2::segment_start</parent>
+      <child>segment_1::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://crazyflie_01</uri>
+      <name>crazyflie_01</name>
+      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
+      <pose>-0.99 0 0 0 0 0</pose>
+    </include>
+
+    <joint name="drone_to_cable_01" type="ball">
+      <pose relative_to='crazyflie_01::hook_link'>0 0 0 0 0 0</pose> 
+      <parent>segment_1::segment_start</parent> 
+      <child>crazyflie_01::hook_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+
+
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+    <!-- SECOND DRONE -->
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment2_2</name>
+      <pose>-0.1697 0.1697 0.1 0 -0.41 -0.785</pose>
+    </include>
+
+    <joint name="cable2_2_to_load" type="ball">
+      <pose relative_to='segment2_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>x_middle_hook</parent>
+      <child>segment2_2::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment2_1</name>
+      <pose>-0.516 0.516 0 0 0 -0.785</pose> 
+    </include>
+
+    <joint name="segment2_1_to_2" type="ball">
+      <pose relative_to='segment2_1::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment2_2::segment_start</parent>
+      <child>segment2_1::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://crazyflie_02</uri>
+      <name>crazyflie_02</name>
+      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
+      <pose>-0.7 0.7 0 0 0 0</pose>
+    </include>
+
+    <joint name="drone2_to_cable_01" type="ball">
+      <pose relative_to='crazyflie_02::hook_link'>0 0 0 0 0 0</pose> 
+      <parent>segment2_1::segment_start</parent> 
+      <child>crazyflie_02::hook_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <!-- THIRD DRONE -->
+    <!-- THIRD DRONE -->
+    <!-- THIRD DRONE -->
+    <!-- THIRD DRONE -->
+    <!-- THIRD DRONE -->
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment3_2</name>
+      <pose>-0.24 0 0.1 0 -0.41 0</pose>
+    </include>
+
+    <joint name="cable3_2_to_load" type="ball">
+      <pose relative_to='segment3_2::segment_end'>0 0 0 0 0 0</pose>
+      <parent>x_middle_hook</parent>
+      <child>segment3_2::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment3_1</name>
+      <pose>-0.6567 -0.1767 0 0 0 0.785</pose> 
+    </include>
+
+    <joint name="segment3_1_to_2" type="ball">
+      <pose relative_to='segment3_1::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment3_2::segment_start</parent>
+      <child>segment3_1::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <include>
+      <uri>model://crazyflie_03</uri>
+      <name>crazyflie_03</name>
+      <!-- <pose>-1.04 0 0 0 0 0</pose> -->
+      <pose>-0.8406 -0.3606 0 0 0 0</pose>
+    </include>
+
+    <joint name="drone3_to_cable_01" type="ball">
+      <pose relative_to='crazyflie_03::hook_link'>0 0 0 0 0 0</pose> 
+      <parent>segment3_1::segment_start</parent> 
+      <child>crazyflie_03::hook_link</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    
+</model>
+
+
+
+  <!-- <model name="hoist_assembly">
+
+    <link name="box_body">
+      <pose>0.2 0 0.2 0 0 0</pose>
+      <inertial>
+        <mass>0.02</mass>
+        <inertia>
+          <ixx>0.000532</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.000532</iyy><iyz>0</iyz><izz>0.000532</izz>
+        </inertia>
+      </inertial>
+      <visual name='visual'><geometry><box><size>0.4 0.4 0.4</size></box></geometry><material><ambient>0.0 0.0 1.0 1</ambient><diffuse>0.0 0.0 1.0 1</diffuse><specular>0.0 0.0 1.0 1</specular></material></visual>
+      <collision name='collision'><geometry><box><size>0.4 0.4 0.4</size></box></geometry><surface><friction><ode><mu> 0.3 </mu></ode></friction></surface></collision>
+    </link>
+    <link name="x_hook"><pose>0 0 0 0 0 0</pose><inertial><mass>0.00001</mass><inertia><ixx>1e-9</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-9</iyy><iyz>0</iyz><izz>1e-9</izz></inertia></inertial><visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual><collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision></link>
+    <joint name="box_to_hook_x_joint" type="fixed"><parent>box_body</parent><child>x_hook</child></joint>
+    <link name="x_middle_hook"><pose>0 0 0.2 0 0 0</pose><inertial><mass>0.00001</mass><inertia><ixx>1e-9</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-9</iyy><iyz>0</iyz><izz>1e-9</izz></inertia></inertial><visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual><collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision></link>
+    <joint name="box_to_middle_hook_x_joint" type="fixed"><parent>box_body</parent><child>x_middle_hook</child></joint>
+    <link name="y_hook"><pose>0 0.2 0 0 0 0</pose><inertial><mass>0.00001</mass><inertia><ixx>1e-9</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-9</iyy><iyz>0</iyz><izz>1e-9</izz></inertia></inertial><visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual><collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision></link>
+    <joint name="box_to_hook_y_joint" type="fixed"><parent>box_body</parent><child>y_hook</child></joint>
+    <link name="y_middle_hook"><pose>0 0.2 0.2 0 0 0</pose><inertial><mass>0.00001</mass><inertia><ixx>1e-9</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-9</iyy><iyz>0</iyz><izz>1e-9</izz></inertia></inertial><visual name="hook_visual"><geometry><sphere><radius>0.005</radius></sphere></geometry></visual><collision name="hook_collision"><geometry><sphere><radius>0.005</radius></sphere></geometry></collision></link>
+    <joint name="box_to_middle_hook_y_joint" type="fixed"><parent>box_body</parent><child>y_middle_hook</child></joint>
+    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher"><odom_frame>odom</odom_frame><dimensions>3</dimensions></plugin>
+
+    <model name="segment4_2">
+      <link name="segment_link"><pose>-0.24 0 0.1 0 -0.41 0</pose><inertial><mass>0.001</mass><pose>0 0 0 0 1.5708 0</pose><inertia><ixx>1e-7</ixx><iyy>1e-7</iyy><izz>1e-7</izz></inertia></inertial><visual name="segment_visual"><pose>0 0 0 0 1.5708 0</pose><geometry><cylinder><radius>0.002</radius><length>0.5</length></cylinder></geometry><material><ambient>0.2 0.2 0.2 1</ambient><diffuse>0.2 0.2 0.2 1</diffuse><specular>0.0 0.0 0.0 1</specular><emissive>0.0 0.0 0.0 1</emissive></material></visual></link>
+      <link name="segment_start"><pose>-0.25 0 0 0 0 0</pose><inertial><mass>1e-9</mass><inertia><ixx>1e-9</ixx><iyy>1e-9</iyy><izz>1e-9</izz></inertia></inertial><visual name="start_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual><collision name="start_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision></link>
+      <joint name="start_joint" type="fixed"><parent>segment_link</parent><child>segment_start</child></joint>
+      <link name="segment_end"><pose>0.25 0 0 0 0 0</pose><inertial><mass>1e-9</mass><inertia><ixx>1e-9</ixx><iyy>1e-9</iyy><izz>1e-9</izz></inertia></inertial><visual name="end_visual"><geometry><sphere><radius>0.001</radius></sphere></geometry></visual><collision name="end_collision"><geometry><sphere><radius>0.001</radius></sphere></geometry></collision></link>
+      <joint name="end_joint" type="fixed"><parent>segment_end</parent><child>segment_link</child></joint>
+    </model>
+    <include>
+      <uri>model://segment_large</uri>
+      <name>segment4_1</name>
+      <pose>-0.6567 0.1767 0 0 0 -0.785</pose> 
+    </include>
+
+    <joint name="segment4_1_to_2" type="ball">
+      <pose relative_to='segment4_1::segment_end'>0 0 0 0 0 0</pose>
+      <parent>segment4_2::segment_start</parent>
+      <child>segment4_1::segment_end</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <plugin
+      filename="gz-sim-detachable-joint-system"
+      name="gz::sim::systems::DetachableJoint">
+      <parent_link>x_middle_hook</parent_link>
+      <child_model>segment4_2</child_model>
+      <child_link>segment_end</child_link>
+      <joint_name>cable4_2_to_load</joint_name>
+      <joint_type>ball</joint_type>
+      <joint_pose relative_to='segment4_2::segment_end'>0 0 0 0 0 0</joint_pose>
+      <joint_axis>0 1 0</joint_axis>
+      <detach_topic>/model/hoist_assembly/detach/cable4_2_to_load</detach_topic>
+    </plugin>
+
+
+    <include><uri>model://segment_large</uri><name>segment_2</name><pose>-0.24 0 0.1 0 -0.41 0</pose></include>
+    <joint name="cable_2_to_load" type="ball"><pose relative_to='segment_2::segment_end'>0 0 0 0 0 0</pose><parent>x_middle_hook</parent><child>segment_2::segment_end</child><axis><xyz>0 1 0</xyz></axis></joint>
+    <include><uri>model://segment_large</uri><name>segment_1</name><pose>-0.73 0 0 0 0 0</pose></include>
+    <joint name="segment_1_to_2" type="ball"><pose relative_to='segment_1::segment_end'>0 0 0 0 0 0</pose><parent>segment_2::segment_start</parent><child>segment_1::segment_end</child><axis><xyz>0 1 0</xyz></axis></joint>
+    <include><uri>model://crazyflie_01</uri><name>crazyflie_01</name><pose>-0.99 0 0 0 0 0</pose></include>
+    <joint name="drone_to_cable_01" type="ball"><pose relative_to='crazyflie_01::hook_link'>0 0 0 0 0 0</pose><parent>segment_1::segment_start</parent><child>crazyflie_01::hook_link</child><axis><xyz>0 1 0</xyz></axis></joint>
+
+    <include><uri>model://segment_large</uri><name>segment2_2</name><pose>-0.1697 0.1697 0.1 0 -0.41 -0.785</pose></include>
+    <joint name="cable2_2_to_load" type="ball"><pose relative_to='segment2_2::segment_end'>0 0 0 0 0 0</pose><parent>x_middle_hook</parent><child>segment2_2::segment_end</child><axis><xyz>0 1 0</xyz></axis></joint>
+    <include><uri>model://segment_large</uri><name>segment2_1</name><pose>-0.516 0.516 0 0 0 -0.785</pose></include>
+    <joint name="segment2_1_to_2" type="ball"><pose relative_to='segment2_1::segment_end'>0 0 0 0 0 0</pose><parent>segment2_2::segment_start</parent><child>segment2_1::segment_end</child><axis><xyz>0 1 0</xyz></axis></joint>
+    <include><uri>model://crazyflie_02</uri><name>crazyflie_02</name><pose>-0.7 0.7 0 0 0 0</pose></include>
+    <joint name="drone2_to_cable_01" type="ball"><pose relative_to='crazyflie_02::hook_link'>0 0 0 0 0 0</pose><parent>segment2_1::segment_start</parent><child>crazyflie_02::hook_link</child><axis><xyz>0 1 0</xyz></axis></joint>
+    
+    <include><uri>model://segment_large</uri><name>segment3_2</name><pose>-0.24 0 0.1 0 -0.41 0</pose></include>
+    <joint name="cable3_2_to_load" type="ball"><pose relative_to='segment3_2::segment_end'>0 0 0 0 0 0</pose><parent>x_middle_hook</parent><child>segment3_2::segment_end</child><axis><xyz>0 1 0</xyz></axis></joint>
+    <include><uri>model://segment_large</uri><name>segment3_1</name><pose>-0.6567 -0.1767 0 0 0 0.785</pose></include>
+    <joint name="segment3_1_to_2" type="ball"><pose relative_to='segment3_1::segment_end'>0 0 0 0 0 0</pose><parent>segment3_2::segment_start</parent><child>segment3_1::segment_end</child><axis><xyz>0 1 0</xyz></axis></joint>
+    <include><uri>model://crazyflie_03</uri><name>crazyflie_03</name><pose>-0.8406 -0.3606 0 0 0 0</pose></include>
+    <joint name="drone3_to_cable_01" type="ball"><pose relative_to='crazyflie_03::hook_link'>0 0 0 0 0 0</pose><parent>segment3_1::segment_start</parent><child>crazyflie_03::hook_link</child><axis><xyz>0 1 0</xyz></axis></joint>
+
+    <include><uri>model://crazyflie_04</uri><name>crazyflie_04</name><pose>-0.8406 0.3606 0 0 0 0</pose></include>
+    <joint name="drone4_to_cable_01" type="ball"><pose relative_to='crazyflie_04::hook_link'>0 0 0 0 0 0</pose><parent>segment4_1::segment_start</parent><child>crazyflie_04::hook_link</child><axis><xyz>0 1 0</xyz></axis></joint>
+  </model> -->
+</sdf>

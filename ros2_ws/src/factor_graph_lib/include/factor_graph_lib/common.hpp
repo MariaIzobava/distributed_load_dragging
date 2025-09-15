@@ -151,6 +151,9 @@ public:
 
         Vector2 ap = getAttachementPoint(xl_k);
 
+        ap_x = ap(0);
+        ap_y = ap(1);
+
         double xl_z = 0.2;
         double xd = xr_k(0) - ap(0);
         double yd = xr_k(1) - ap(1);

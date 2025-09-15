@@ -38,8 +38,7 @@ class GtsamCppTestNode : public BaseMpc
 public:
     GtsamCppTestNode() : 
     BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/two_drones_with_height.csv", 
-        3, 
+        "/home/maryia/legacy/experiments/metrics/", 
         false, 
         true, 
         "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/two_drones_with_height_points.json",
@@ -49,6 +48,9 @@ public:
 
         this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
         this->declare_parameter<int>("robot_num", 2);
+        init_robot_num(robot_num_);
+
+        cout << "here\n";
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
         robot_num_ = this->get_parameter("robot_num").as_int();
@@ -56,6 +58,8 @@ public:
         position_.resize(robot_num_);
         angles_.resize(robot_num_);
         rot_.resize(robot_num_);
+
+        cout << "here\n";
 
         for (int i = 0; i < robot_num_; i++) {
             position_[i].resize(6);
@@ -77,6 +81,8 @@ public:
                 this->robot_odom_subscribe_callback(msg, i);
             }));
         }
+
+        cout << "here\n";
 
         load_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
           "load/odom",
@@ -113,6 +119,7 @@ private:
 
     int is_pulling_, robot_num_;
     double desired_height_;
+    double pos_error_;
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -170,15 +177,16 @@ private:
         std::vector<double> tensions;
         std::vector<int> ap_directions;
         std::vector<std::vector<double> > controls;
-        // for (int i = 0; i < robot_num_; i++) {
-        //     tensions.push_back(next_velocity[robot_num_ * 3 + i]);
-        //     ap_directions.push_back(1);
+        controls.resize(robot_num_);
+        for (int i = 0; i < robot_num_; i++) {
+            tensions.push_back(next_velocity[robot_num_ * 3 + i]);
+            ap_directions.push_back(1);
 
-        //     controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i]);
-        //     controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i + 1]);
-        //     controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i + 2]);
-        // }
-        //record_metrics(load_position_, position_, tensions, ap_directions, controls);
+            controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i]);
+            controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i + 1]);
+            controls[i].push_back(next_velocity[robot_num_ * 4 + 3 * i + 2]);
+        }
+        record_metrics(load_position_, position_, tensions, ap_directions, controls, pos_error_);
 
         cout << next_velocity.size() << ' '<< robot_num_ << endl;
         for (int i = 0; i < robot_num_; i++) {
@@ -236,8 +244,7 @@ private:
 
         auto executor = FactorExecutorFactory::create("sim", robot_num_, initial_load_state, initial_robot_states_, final_load_goal, {}, {});
         map<string, double> factor_errors = {};
-        double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error);
+        return executor->run(factor_errors, pos_error_);
     }
 };
 

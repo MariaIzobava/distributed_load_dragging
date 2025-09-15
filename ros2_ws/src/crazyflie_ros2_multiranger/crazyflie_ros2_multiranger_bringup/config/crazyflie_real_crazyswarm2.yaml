@@ -2,7 +2,7 @@
 robots:
   crazyflie_real:
     enabled: true
-    uri: radio://0/81/2M/E7E7E7E7E7
+    uri: radio://0/81/2M/E7E7E7E7E7  # 80 for attached drone, 81 for another one
     initial_position: [0.0, 0.0, 0.0]
     type: cf21  # see robot_types
 

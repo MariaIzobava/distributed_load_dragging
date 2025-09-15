@@ -654,6 +654,7 @@ private:
     double weight_;       // Weight for this factor
     double k_;
     string ap_;
+    double half_size_;
 
     double smooth_max_zero_(double x, double epsilon = 1e-6) const {
         return 0.5 * (x + std::sqrt(x*x + epsilon*epsilon));

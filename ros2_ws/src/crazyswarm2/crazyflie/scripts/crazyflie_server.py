@@ -1105,6 +1105,8 @@ class CrazyflieServer(Node):
            to the crazyflie
         """
 
+        #self.get_logger().info('IN POSES_CHANGED')
+
         poses = msg.poses
         for pose in poses:
             name = pose.name
@@ -1115,7 +1117,7 @@ class CrazyflieServer(Node):
 
             if name in self.uri_dict.keys():
                 uri = self.uri_dict[name]
-                # self.get_logger().info(f"{uri}: send extpos {x}, {y}, {z} to {name}")
+                #self.get_logger().info(f"{uri}: send extpos {x}, {y}, {z} to {name}")
                 if isnan(quat.x):
                     self.swarm._cfs[uri].cf.extpos.send_extpos(
                         x, y, z)

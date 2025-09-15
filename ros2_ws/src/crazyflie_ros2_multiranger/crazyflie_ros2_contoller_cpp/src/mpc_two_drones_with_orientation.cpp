@@ -39,8 +39,7 @@ class GtsamCppTestNode : public BaseMpc
 public:
     GtsamCppTestNode() : 
     BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/two_drones_with_ori.csv", 
-        2, 
+        "/home/maryia/legacy/experiments/metrics/", 
         true, 
         false, 
         "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/two_drones_with_ori_points.json",
@@ -49,6 +48,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "MPC for 2 drones with load orientation with GTSAM node has started.");
 
         this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
+        init_robot_num(2);
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
 
@@ -104,6 +104,7 @@ private:
 
     int is_pulling_;
     double desired_height_;
+    double pos_error_;
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -163,9 +164,11 @@ private:
 
         // Now the drone is in "pulling" mode, control with MPC
         auto next_velocity = get_next_velocity_();
+        std::vector<double> load_pos = {load_position_[0], load_position_[1], load_angles_[2], 
+            load_position_[3], load_position_[4], load_angles_[3]};
 
-        record_metrics(load_position_, {position1_, position2_}, {next_velocity[4], next_velocity[5]}, {1, 2},
-         {{next_velocity[6], next_velocity[7]}, {next_velocity[8], next_velocity[9]}});
+        record_metrics(load_pos, {position1_, position2_}, {next_velocity[4], next_velocity[5]}, {1, 2},
+         {{next_velocity[6], next_velocity[7]}, {next_velocity[8], next_velocity[9], 0.0}}, pos_error_);
 
         convert_robot_velocity_to_local_frame(
             next_velocity[0], next_velocity[1], desired_height_ - position1_[2], 
@@ -227,7 +230,7 @@ private:
         auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot1_state, initial_robot2_state, final_load_goal, position1_[2], position2_[2], {}, {});
         map<string, double> factor_errors = {};
         double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error);
+        return executor->run(factor_errors, pos_error_);
     }
 };
 

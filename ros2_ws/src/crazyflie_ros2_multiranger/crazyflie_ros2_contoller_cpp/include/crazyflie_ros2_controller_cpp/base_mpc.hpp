@@ -15,6 +15,7 @@
 #include <vector>
 #include <cstdio>
 #include <nlohmann/json.hpp>
+#include <math.h>
 
 using json = nlohmann::json;
 
@@ -31,18 +32,37 @@ protected:
 
   explicit BaseMpc(
     const std::string& metrics_file,
-    int num_robots, 
     bool load_ori, 
     bool robot_height, 
     const std::string& datapoints_file,
     const std::string& node_name)
-  : rclcpp::Node(node_name), metrics_file_(metrics_file), num_robots_(num_robots), load_ori_(load_ori), robot_height_(robot_height), datapoints_file_(datapoints_file) {
-    
+  : rclcpp::Node(node_name), metrics_file_(metrics_file), load_ori_(load_ori), robot_height_(robot_height), datapoints_file_(datapoints_file) {
+
+    // Should be initialized via init_robot_num
+    num_robots_ = 0;
+
     path_subscription_ = this->create_subscription<nav_msgs::msg::Path>(
           "/desired_path",
           10, // QoS history depth
           std::bind(&BaseMpc::path_subscribe_callback, this, std::placeholders::_1));
+  }
 
+  void init_robot_num(int robot_num) {
+    num_robots_ = robot_num;
+
+    cout << "here\n";
+
+    std::vector<string> num_drones = {"one_drone", "two_drones", "three_drones", "four_drones"};
+    std::string filename = num_drones[num_robots_ - 1];
+    filename += robot_height_ ? "_with_height" : "";
+    filename += load_ori_ ? "_with_ori" : "";
+    filename += ".csv";
+
+    metrics_file_ += filename;
+
+    cout << "here\n";
+
+    cout << "Metrics will be stored in: " << metrics_file_ << endl;
     // Clean up and initialize metrics file with correct headers
     initialize_metrics_file();
   }
@@ -83,8 +103,17 @@ protected:
 
       angles[0] = roll;
       angles[1] = pitch;
-      angles[2] = yaw;
 
+      if (have_prev_angle) {
+        if ((angles[2] < -3.01 && yaw > 2.7) || (angles[2] < -3.14)) {
+          angles[2] = -M_PI - (M_PI - yaw);
+        } else {
+          angles[2] = yaw;
+        }
+      } else {
+        angles[2] = yaw;
+        have_prev_angle = true;
+      }
       // Transforming velocity from local frame to world frame
       rotation_m = get_rot_from_euler(roll, pitch, yaw);
       Eigen::Vector3d v_local;
@@ -101,7 +130,8 @@ protected:
     const std::vector<std::vector<double>>& robots, 
     std::vector<double> tensions,
     std::vector<int> ap_directions,
-    std::vector<std::vector<double>> controls = {}) {
+    std::vector<std::vector<double>> controls = {},
+    double pos_error = 0.0) {
       // Open the file in append mode (std::ios::app)
       std::ofstream file(metrics_file_, std::ios::app);
       if (!file.is_open()) {
@@ -122,9 +152,9 @@ protected:
         row.push_back(tensions[i]);
         row.push_back(controls[i][0]);
         row.push_back(controls[i][1]);
+        row.push_back(controls[i][2]);
 
         if (load_ori_) {
-          row.push_back(controls[i][2]);
 
           Vector4 robot_state(
             robots[i][0], robots[i][1],
@@ -138,6 +168,7 @@ protected:
           row.push_back(h.ap_x);
           row.push_back(h.ap_y);
         }
+        row.push_back(pos_error);
       }
 
       std::string line = join(row, ",");
@@ -185,6 +216,25 @@ protected:
     msg.linear.z = max(min(v_world(2), limit), -limit); 
   }
 
+  // This function takes roll, pitch, and yaw (rx, ry, rz)
+  // and returns a combined 3x3 rotation matrix.
+  // The order of multiplication is Z-Y-X.
+  Eigen::Matrix3d get_rot_from_euler(double rx, double ry, double rz) {
+      // Eigen's AngleAxisd class represents a rotation by an angle around an axis.
+      // The order of multiplication matters: yaw, then pitch, then roll.
+      // The multiplication is Z * Y * X, which is a common convention for intrinsic rotations.
+      Eigen::AngleAxisd rollAngle(rx, Eigen::Vector3d::UnitX());
+      Eigen::AngleAxisd pitchAngle(ry, Eigen::Vector3d::UnitY());
+      Eigen::AngleAxisd yawAngle(rz, Eigen::Vector3d::UnitZ());
+
+      // Multiplying the AngleAxis objects gives a combined rotation.
+      // This product is internally stored as a quaternion, which is efficient and avoids Gimbal Lock.
+      Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
+      
+      // Convert the quaternion to a 3x3 rotation matrix
+      return q.toRotationMatrix();
+  }
+
 private:
 
   void path_subscribe_callback(const nav_msgs::msg::Path::SharedPtr msg)
@@ -206,39 +256,22 @@ private:
 
       // Now construct the required headers
       header_file << "timestamp,actual_load_x,actual_load_y";
-      std::string drone_tmpl = "drone%d_pose_x,drone%d_pose_y,drone%d_pose_z,drone%d_velocity_x,drone%d_velocity_y,drone%d_velocity_z,cable%d_tension,drone%d_control_x,drone%d_control_y";
+      std::string drone_tmpl = "drone%d_pose_x,drone%d_pose_y,drone%d_pose_z,drone%d_velocity_x,drone%d_velocity_y,drone%d_velocity_z,cable%d_tension,drone%d_control_x,drone%d_control_y,drone%d_control_z";
       
       for (int i = 1; i <= num_robots_; i++) {
-        char buffer[150];
-        snprintf(buffer, sizeof(buffer), drone_tmpl.c_str(), i, i, i, i, i, i, i, i, i);
+        char buffer[250];
+        snprintf(buffer, sizeof(buffer), drone_tmpl.c_str(), i, i, i, i, i, i, i, i, i, i);
         std::string drone_str(buffer);
         header_file << "," << drone_str;
 
         if (load_ori_) {
-          header_file << ",drone" << i << "_control_z" << "," << "attachment_point" << i << "_x,attachment_point" << i << "_y";
+          header_file << "," << "attachment_point" << i << "_x,attachment_point" << i << "_y";
         }
+        header_file << ",pos_error";
       }
+      cout << "here\n";
       header_file << std::endl;
       header_file.close();
-  }
-
-  // This function takes roll, pitch, and yaw (rx, ry, rz)
-  // and returns a combined 3x3 rotation matrix.
-  // The order of multiplication is Z-Y-X.
-  Eigen::Matrix3d get_rot_from_euler(double rx, double ry, double rz) {
-      // Eigen's AngleAxisd class represents a rotation by an angle around an axis.
-      // The order of multiplication matters: yaw, then pitch, then roll.
-      // The multiplication is Z * Y * X, which is a common convention for intrinsic rotations.
-      Eigen::AngleAxisd rollAngle(rx, Eigen::Vector3d::UnitX());
-      Eigen::AngleAxisd pitchAngle(ry, Eigen::Vector3d::UnitY());
-      Eigen::AngleAxisd yawAngle(rz, Eigen::Vector3d::UnitZ());
-
-      // Multiplying the AngleAxis objects gives a combined rotation.
-      // This product is internally stored as a quaternion, which is efficient and avoids Gimbal Lock.
-      Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
-      
-      // Convert the quaternion to a 3x3 rotation matrix
-      return q.toRotationMatrix();
   }
 
   // A simple function to join elements of a vector into a comma-separated string
@@ -261,6 +294,7 @@ private:
   bool load_ori_;  // If True then load orientation is considered in the optimization problem
   bool robot_height_;  // If True then robot height is considered in the optimization problem
   int kk_ = 0;
+  bool have_prev_angle = false;
 };
 
 #endif // CRAZYFLIE_ROS2_CONTROLLER_CPP_BASE_MPC_HPP_

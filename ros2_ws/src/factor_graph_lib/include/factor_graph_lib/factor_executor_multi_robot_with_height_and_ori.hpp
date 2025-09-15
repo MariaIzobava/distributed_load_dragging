@@ -12,6 +12,7 @@
 #include "cable_factors.hpp"
 #include "control_factors.hpp"
 #include "dynamics_factors_with_height.hpp"
+#include "dynamics_factors_with_angle.hpp"
 #include "dynamics_factors_multi_robots_with_height_and_ori.hpp"
 #include "factor_executor.hpp"
 
@@ -58,8 +59,8 @@ public:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.02;   // kg
-        const double inertia = 0.000532;
+        const double load_mass = 0.015;   // kg
+        const double inertia = 0.000399;
         const double gravity = 9.81;
         const double mu = 0.3;
         const double mu2 = 0.3;
@@ -68,17 +69,17 @@ public:
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 0.5); 
-        const double u_lower_bound = getd("u_lower_bound", 0.003);
+        const double u_upper_bound = getd("u_upper_bound", 0.7); //0.55
+        const double u_lower_bound = getd("u_lower_bound", 0.003); //0.245
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0) ;
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.0008096
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.0008096  0.266292
 
         double cable_stretch_penalty_offset = getd("cable_stretch_penalty_offset", 0.0);
         double tension_slack_penalty_offset = getd("tension_slack_penalty_offset", 0.2); 
-        double tether_tension_offset = getd("tether_tension_offset", 0.3); //0.38672
+        double tether_tension_offset = getd("tether_tension_offset", 0.3); //0.38672  IT SHOULD BE SMALLER! Try the factor to encourage large distance between drone and load
 
         bool have_uk_prior = getb("have_uk_prior", true);
         
@@ -89,7 +90,15 @@ public:
 
         bool have_trajectory_reference_factor = getb("have_trajectory_reference_factor", true);
 
-        double goal_cost_v = getd("goal_cost", 0.00005); 
+        double goal_cost_v = getd("goal_cost", 0.00005);
+        double robot_height_v_cost = getd("robot_height_v_cost", 0.01); //0.001
+
+//         robot_height_v_cost 0.001
+// tether_tension_offset 0.0015
+// u_upper_bound 0.4
+// weight_tether_tension 0.0064
+
+
 
         // STATE PRIORS
         auto init_cost = noiseModel::Diagonal::Sigmas(
@@ -97,7 +106,7 @@ public:
         auto goal_cost = noiseModel::Diagonal::Sigmas(
             (Vector(6) << 0.000005, 0.000005, 0.000005, 1000.1, 1000.1, 1000.1).finished());
         auto robot_height_cost = noiseModel::Diagonal::Sigmas(
-            (Vector(6) << 1000.001, 1000.001, 0.0001, 1000.001, 1000.001, 0.1).finished());
+            (Vector(6) << 1000.001, 1000.001, 0.0001, 1000.001, 1000.001, robot_height_v_cost).finished());
 
         // DYNAMICS
         auto dynamics_robot_cost = noiseModel::Diagonal::Sigmas(
@@ -114,7 +123,7 @@ public:
         auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
 
         // DISTANCE
-        auto distance_cost = noiseModel::Isotropic::Sigma(1, 1e-4);
+        auto distance_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
         // =============================
         // =============================
 
@@ -158,14 +167,17 @@ public:
                     graph.add(RobotsDistanceWithHeightFactor(symbol_t(x_[i], k), symbol_t(x_[j], k), 0.1, distance_cost));
                 }
 
-                double height = 0.3 + 0.05 * i;
+                graph.add(RobotLoadWithHeightAndOrientationFactor(symbol_t(x_[i], k), symbol_t('l', k), cable_length - 0.1, 1.0, tension_cost));
+
+
+                double height = 0.5;//0.3 + 0.1 * i;
 
                 graph.add(RobotsHeightLowerBoundFactor(symbol_t(x_[i], k+1), height - 0.05, control_cost));
                 graph.add(RobotsHeightUpperBoundFactor(symbol_t(x_[i], k+1), height + 0.05, control_cost));
 
                 Vector6 heightx = initial_robot_states_[i];
                 heightx(2) = height;
-                heightx(5) = 0.0;
+                heightx(5) = height - initial_robot_states_[i][2];
                 graph.add(PriorFactor<Vector6>(symbol_t(x_[i], k+1), heightx, robot_height_cost));
             }
 
@@ -249,8 +261,9 @@ public:
             }
 
             if (k > 0 && have_uk_prior) {
+                 Vector3 ui(0.0, 0.0, 0.0); //0.245
                 for (int i = 0; i < robot_num_; i++) {
-                graph.add(PriorFactor<Vector3>(symbol_t(u_[i], k), Vector3::Zero(), control_interim_cost));
+                graph.add(PriorFactor<Vector3>(symbol_t(u_[i], k), ui, control_interim_cost));
                 }
             }
 
@@ -268,7 +281,7 @@ public:
 
         // --- 3. Create Initial Estimate ---
         Values initial_values;
-        Vector3 init_u(0.0, 0.0, 0.0);
+        Vector3 init_u(0.0, 0.0, 0.0);  //0.245
         Vector1 init_t(0.0);
         for (int k = 0; k <= num_time_steps; ++k) {
             for (int i = 0; i < robot_num_; i++) {
@@ -288,7 +301,7 @@ public:
         Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         std::vector<double> next_vels;
         for (int i = 0; i < robot_num_; i++) {

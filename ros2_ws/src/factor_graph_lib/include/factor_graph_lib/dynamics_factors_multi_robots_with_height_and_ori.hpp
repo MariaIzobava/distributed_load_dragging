@@ -21,6 +21,7 @@ using namespace gtsam;
 class RobotDynamicsWithHeightAndOriFactor: public NoiseModelFactor5<Vector6, Vector6, Vector3, Vector1, Vector6> {
     double dt_;
     double robot_mass_;
+    double g_ = 9.81;
 
 public:
     RobotDynamicsWithHeightAndOriFactor(Key key_xr_k, Key key_xl_k, Key key_u_k, Key key_tension_k, Key key_xr_k_plus_1,
@@ -44,9 +45,10 @@ public:
         Vector3 vel_k = xr_k.tail<3>();
 
         CableVectorHelper h(xr_k, xl_k);
+        Vector3 gravity_v(0.0, 0.0, 0.245);
 
         Vector3 next_pos = pos_k + vel_k * dt_;
-        Vector3 next_vel = vel_k + dt_ / robot_mass_ * (u_k - tension_k(0) * h.e3_norm);
+        Vector3 next_vel = vel_k + dt_ / robot_mass_ * (u_k - tension_k(0) * h.e3_norm);// - gravity_v);
 
         Vector6 predicted_xr_k_plus_1(6);
         predicted_xr_k_plus_1 << next_pos, next_vel;

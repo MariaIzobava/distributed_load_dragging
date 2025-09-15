@@ -65,23 +65,26 @@ public:
         std::vector<double> cable_lengths;
         for (int i = 0; i < robot_num_; i++) {
             double h = robot_heights_[i];
-            cable_lengths.push_back(sqrt(1.03 * 1.03 - (h) * (h)));
+            cable_lengths.push_back(sqrt(1.03 * 1.03 - (h - 0.2) * (h - 0.2)));
         }
 
         // VALUES TO TUNE
         // =============================
         // =============================
-        const double u_upper_bound = getd("u_upper_bound", 2.8); 
+        double u_upper_bound = getd("u_upper_bound", 0.5); //5 for 3 and 4 robots!!! 
+        // if (robot_num_ == 3) {
+        //     u_upper_bound = 0.55; //0.45 for 4 detachale 
+        // }
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0) ;
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension",   0.0008096); //0.0008096  0.266292
+        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.296292  0.266292
 
         double cable_stretch_penalty_offset = getd("cable_stretch_penalty_offset", 0.0);
         double tension_slack_penalty_offset = getd("tension_slack_penalty_offset", 0.2); 
-        double tether_tension_offset = getd("tether_tension_offset", 0.38672); //0.38672
+        double tether_tension_offset = getd("tether_tension_offset", 0.3); //0.38672
 
         bool have_uk_prior = getb("have_uk_prior", true);
         
@@ -91,6 +94,8 @@ public:
         bool have_tether_tension_factor = getb("have_tether_tension_factor", true);
 
         bool have_trajectory_reference_factor = getb("have_trajectory_reference_factor", true);
+
+        double min_distance_between_robots = getd("min_distance_between_robots", 0.05);
 
         // double goal_cost_v = getd("goal_cost", 0.00005); 
 
@@ -109,12 +114,15 @@ public:
             (Vector(6) << 0.001, 0.001, 0.01, 0.001, 0.001, 0.01).finished());
 
         // CONTROL
-        auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-5);
+        auto control_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
         auto control_interim_cost = noiseModel::Diagonal::Sigmas(
             (Vector(2) << 10.0, 10.0).finished());
 
         // TENSION
         auto tension_cost = noiseModel::Isotropic::Sigma(1, 1e-3);
+
+        // DISTANCE
+        auto distance_cost = noiseModel::Isotropic::Sigma(1, 1e-2);
         // =============================
         // =============================
 
@@ -154,13 +162,36 @@ public:
                     dynamics_cost
                     ));
 
-                // for (int j = i + 1; j < robot_num_; j++) {
-                //     graph.add(RobotsDistanceFactor(symbol_t(x_[i], k), symbol_t(x_[j], k), 0.1, tension_cost));
-                // }
+                for (int j = i + 1; j < robot_num_; j++) {
+                    graph.add(RobotsDistanceFactor(symbol_t(x_[i], k), symbol_t(x_[j], k), min_distance_between_robots, distance_cost));
+                }
+
+                // Didn't use for both 3 and 4 drones with 2 seg
+                //graph.add(RobotLoadWithOrientationFactor(symbol_t(x_[i], k), symbol_t('l', k), cable_lengths[i] - 0.1, 1.0, tension_cost));
             }
 
             if (robot_num_ == 4)  {
-            graph.add(LoadDynamicsMultiRobotsWithLoadOrientationFactor4(
+            // graph.add(LoadDynamicsMultiRobotsWithLoadOrientationFactor4(
+            //     symbol_t('l', k),
+            //     symbol_t(x_[0], k),
+            //     symbol_t(t_[0], k),
+            //     symbol_t(x_[1], k),
+            //     symbol_t(t_[1], k),
+            //     symbol_t(x_[2], k),
+            //     symbol_t(t_[2], k),
+            //     symbol_t(x_[3], k),
+            //     symbol_t(t_[3], k),
+            //     symbol_t('l', k+1),
+            //     dt,
+            //     load_mass,
+            //     mu,
+            //     mu2,
+            //     gravity,
+            //     inertia,
+            //     dynamics_cost_with_angle
+            //     ));
+
+            graph.add(LoadDynamicsFourRobotsWithLoadOrientationFactor(
                 symbol_t('l', k),
                 symbol_t(x_[0], k),
                 symbol_t(t_[0], k),
@@ -179,8 +210,30 @@ public:
                 inertia,
                 dynamics_cost_with_angle
                 ));
+
+            
             } else if (robot_num_ == 3) {
-            graph.add(LoadDynamicsMultiRobotsWithLoadOrientationFactor3(
+            // graph.add(LoadDynamicsMultiRobotsWithLoadOrientationFactor3(
+            //     symbol_t('l', k),
+            //     symbol_t(x_[0], k),
+            //     symbol_t(t_[0], k),
+            //     symbol_t(x_[1], k),
+            //     symbol_t(t_[1], k),
+            //     symbol_t(x_[2], k),
+            //     symbol_t(t_[2], k),
+            //     symbol_t('l', k+1),
+            //     dt,
+            //     load_mass,
+            //     mu,
+            //     mu2,
+            //     gravity,
+            //     inertia,
+            //     dynamics_cost_with_angle
+            //     ));
+
+            
+
+            graph.add(LoadDynamicsThreeRobotsWithLoadOrientationFactor(
                 symbol_t('l', k),
                 symbol_t(x_[0], k),
                 symbol_t(t_[0], k),
@@ -197,31 +250,13 @@ public:
                 inertia,
                 dynamics_cost_with_angle
                 ));
-            } else {
-            // graph.add(LoadDynamicsTwoRobotsWithLoadOrientationFactor(
-            //     symbol_t('l', k),
-            //     symbol_t(x_[0], k),
-            //     symbol_t(t_[0], k),
-            //     symbol_t(x_[1], k),
-            //     symbol_t(t_[1], k),
-            //     symbol_t('l', k+1),
-            //     dt,
-            //     load_mass,
-            //     mu,
-            //     mu2,
-            //     gravity,
-            //     inertia,
-            //     true,
-            //     1,
-            //     dynamics_cost_with_angle
-            //     ));
-
-            graph.add(LoadDynamicsMultiRobotsWithLoadOrientationFactor2(
+            } else if (robot_num_ == 2) {
+            graph.add(LoadDynamicsTwoRobotsWithLoadOrientationFactor(
                 symbol_t('l', k),
-                symbol_t('x', k),
-                symbol_t('t', k),
-                symbol_t('X', k),
-                symbol_t('T', k),
+                symbol_t(x_[0], k),
+                symbol_t(t_[0], k),
+                symbol_t(x_[1], k),
+                symbol_t(t_[1], k),
                 symbol_t('l', k+1),
                 dt,
                 load_mass,
@@ -229,8 +264,26 @@ public:
                 mu2,
                 gravity,
                 inertia,
+                true,
+                1,
                 dynamics_cost_with_angle
                 ));
+
+            // graph.add(LoadDynamicsMultiRobotsWithLoadOrientationFactor2(
+            //     symbol_t('l', k),
+            //     symbol_t('x', k),
+            //     symbol_t('t', k),
+            //     symbol_t('X', k),
+            //     symbol_t('T', k),
+            //     symbol_t('l', k+1),
+            //     dt,
+            //     load_mass,
+            //     mu,
+            //     mu2,
+            //     gravity,
+            //     inertia,
+            //     dynamics_cost_with_angle
+            //     ));
             }
 
             // Factor 1: Enforce T_k >= 0
@@ -300,7 +353,7 @@ public:
         Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
         double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = a1 / a2;
+        pos_error = graph.error(result);
 
         std::vector<double> next_vels;
         for (int i = 0; i < robot_num_; i++) {

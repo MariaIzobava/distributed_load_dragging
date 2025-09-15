@@ -38,8 +38,7 @@ class GtsamCppTestNode : public BaseMpc
 public:
     GtsamCppTestNode() : 
     BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/four_drones_with_ori.csv", 
-        4, 
+        "/home/maryia/legacy/experiments/metrics/", 
         true, 
         false, 
         "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/four_drones_with_ori_points.json",
@@ -52,6 +51,7 @@ public:
 
         std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
         robot_num_ = this->get_parameter("robot_num").as_int();
+        init_robot_num(robot_num_);
 
         cout << "Registered number of robots: " << robot_num_ << endl;
 
@@ -67,7 +67,11 @@ public:
         load_angles_.resize(6);
 
         is_pulling_ = 0;
-        desired_height_ = 0.5;
+        for (int i = 0; i < robot_num_; i++) {
+            double sgn = (i % 2 == 0) ? 1: -1;
+            desired_heights_.push_back(0.5 + sgn * 0.1 * i);
+            //desired_heights_.push_back(0.2 + 0.15 * i);
+        }
 
         for (int i = 0; i < robot_num_; i++) {
             string suffix = "_0" + to_string(i+1) + "/odom";
@@ -90,6 +94,11 @@ public:
           10, // QoS history depth
           std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
 
+        last_robot_rm_ = this->create_subscription<std_msgs::msg::Bool>(
+          "last_robot_rm",
+          10, // QoS history depth
+          std::bind(&GtsamCppTestNode::last_robot_rm_callback, this, std::placeholders::_1));
+
         for (int i = 0; i < robot_num_; i++) {
             string topic_name = "/cmd_vel_0" + to_string(i+1);
             twist_publisher_.push_back(this->create_publisher<geometry_msgs::msg::Twist>(topic_name, 10));
@@ -103,7 +112,7 @@ private:
     std::vector<rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> twist_publisher_;
     std::vector<rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr> odom_subscription_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
-    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_, last_robot_rm_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::vector<std::vector<double> > position_;
@@ -114,7 +123,20 @@ private:
     Eigen::Matrix3d rotl_;
 
     int is_pulling_, robot_num_;
-    double desired_height_;
+    std::vector<double> desired_heights_;
+    double pos_error_;
+
+    int last_drone_removed_ = 0;
+
+    void last_robot_rm_callback(const std_msgs::msg::Bool msg) {
+        if (last_drone_removed_) {
+            cout << "Last drone was already removed; Ignoring the command!\n";
+            return;
+        }
+
+        cout << "Removing Crazyflie_0" << robot_num_ + 1 << endl;
+        last_drone_removed_ = 1;
+    }
 
     void land_subscribe_callback(const std_msgs::msg::Bool msg)
     {
@@ -148,7 +170,7 @@ private:
                 geometry_msgs::msg::Twist new_cmd_msg;
                 new_cmd_msg.linear.z = 0.1;
 
-                if (position_[i][2] > desired_height_) {
+                if (position_[i][2] > desired_heights_[i]) {
                     new_cmd_msg.linear.z = 0.0;
                     is_pulling_ |= (1 << i);
                 }
@@ -172,22 +194,32 @@ private:
         std::vector<double> tensions;
         std::vector<int> ap_directions;
         std::vector<std::vector<double> > controls;
+        int cur_robot_num = robot_num_ - last_drone_removed_;
         controls.resize(robot_num_);
         for (int i = 0; i < robot_num_; i++) {
-            tensions.push_back(next_velocity[robot_num_ * 2 + i]);
             ap_directions.push_back(1);
 
-            controls[i].push_back(next_velocity[robot_num_ * 3 + 2 * i]);
-            controls[i].push_back(next_velocity[robot_num_ * 3 + 2 * i + 1]);
+            if (last_drone_removed_ && i == robot_num_ - 1) {
+                tensions.push_back(0);
+                controls[i].push_back(0);
+                controls[i].push_back(0);
+            } else {
+                tensions.push_back(next_velocity[cur_robot_num * 2 + i]);
+                controls[i].push_back(next_velocity[cur_robot_num * 3 + 2 * i]);
+                controls[i].push_back(next_velocity[cur_robot_num * 3 + 2 * i + 1]);
+            }
+
             controls[i].push_back(0.0);
         }
-        record_metrics(load_position_, position_, tensions, ap_directions, controls);
+        std::vector<double> load_pos = {load_position_[0], load_position_[1], load_angles_[2], 
+            load_position_[3], load_position_[4], load_angles_[3]};
+        record_metrics(load_pos, position_, tensions, ap_directions, controls, pos_error_);
 
-        for (int i = 0; i < robot_num_; i++) {
+        for (int i = 0; i < cur_robot_num; i++) {
             geometry_msgs::msg::Twist new_cmd_msg;
 
             convert_robot_velocity_to_local_frame(
-                next_velocity[2 * i], next_velocity[2 * i + 1], desired_height_ - position_[i][2], 
+                next_velocity[2 * i], next_velocity[2 * i + 1], desired_heights_[i] - position_[i][2], 
                 rot_[i], new_cmd_msg, 0.2
             );
 
@@ -200,7 +232,7 @@ private:
     std::vector<double> get_next_velocity_() {
         std::vector<Vector4> initial_robot_states_;
         std::vector<double> heights;
-        for (int i = 0; i < robot_num_; i++) {
+        for (int i = 0; i < robot_num_ - last_drone_removed_; i++) {
             Vector4 state(
                 position_[i][0], position_[i][1],
                 position_[i][3], position_[i][4]
@@ -232,16 +264,16 @@ private:
 
         cout << "\n===================" << std::endl;
         cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << ", " << initial_load_state[4] <<  ", " << initial_load_state[5] << std::endl;
-        for (int i = 0; i < robot_num_; i++) {
+        for (int i = 0; i < robot_num_ - last_drone_removed_; i++) {
             cout << "Cur robot " << i + 1 << " position: " << initial_robot_states_[i][0] <<  ", " << initial_robot_states_[i][1] << ", " << initial_robot_states_[i][2] <<  ", " << initial_robot_states_[i][3] <<  std::endl;
             cout << "Height: " << heights[i] << endl;    
         }
         cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1]<<  ", " << final_load_goal[2] << std::endl;
 
-        auto executor = FactorExecutorFactory::create("sim", robot_num_, initial_load_state, initial_robot_states_, final_load_goal, heights, {}, {});
+        auto executor = FactorExecutorFactory::create("sim", robot_num_ - last_drone_removed_, initial_load_state, initial_robot_states_, final_load_goal, heights, {}, {});
         map<string, double> factor_errors = {};
         double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error);
+        return executor->run(factor_errors, pos_error_);
     }
 };
 

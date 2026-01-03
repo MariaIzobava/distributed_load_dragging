@@ -279,7 +279,7 @@ private:
         //         {"init_load", initial_load_state},
         //         {"init_robot", initial_robot_state},
         //         {"goal_load", final_load_goal},
-        //         {"height" , position_[2]},
+        //         {"height" , position_[0][2]},
         //         {"last_u" , last_control_},
         //     }
         // );

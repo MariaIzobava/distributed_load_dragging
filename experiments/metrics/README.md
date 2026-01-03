@@ -4,7 +4,7 @@ This folder contains a python script which can generate metrics based on the dat
 
 The data should be saved in `output/` folder in a format, represeting the scenario. Metrics graphs will be saved in the same folder once generated.
 
-# Usage
+## Usage
 
 Run the python script as follows picking the required flags:
 

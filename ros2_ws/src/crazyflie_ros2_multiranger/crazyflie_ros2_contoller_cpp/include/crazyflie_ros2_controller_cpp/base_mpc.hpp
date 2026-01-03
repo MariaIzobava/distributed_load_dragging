@@ -56,7 +56,7 @@ protected:
   : rclcpp::Node(node_name), load_ori_(load_ori), robot_height_(robot_height) {
 
     metrics_file_ = "/home/maryia/legacy/experiments/metrics/output/";
-    datapoints_file_ = "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/";
+    datapoints_file_ = "/home/maryia/legacy/experiments/factor_graph_params_tuning/data/";
     
     this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
     this->declare_parameter<int>("robot_num", 1);

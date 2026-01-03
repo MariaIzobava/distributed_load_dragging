@@ -1,6 +1,7 @@
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
+#include <array>
 #include <string>
 
 #include <gtsam/slam/PriorFactor.h>
@@ -15,6 +16,15 @@
 
 using namespace std;
 using namespace gtsam;
+
+
+struct DroneExecutorResult {
+    std::array<double, 3> drone_vel;
+    std::array<double, 3> controls;
+    double tension;
+};
+
+using FactorExecutorResult = std::vector<DroneExecutorResult>;
 
 
 class CableVectorHelper {

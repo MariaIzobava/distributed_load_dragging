@@ -50,7 +50,7 @@ public:
     initial_robot_states_(initial_robot_states), 
     final_load_goal_(final_load_goal) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
 
         NonlinearFactorGraph graph;
 
@@ -260,32 +260,28 @@ public:
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
         pos_error = graph.error(result);
 
-        std::vector<double> next_vels;
+        FactorExecutorResult exec_result = {};
         for (int i = 0; i < robot_num_; i++) {
 
             Vector6 next_state = result.at<Vector6>(symbol_t(x_[i], 1));
-            next_vels.push_back(next_state[3]);
-            next_vels.push_back(next_state[4]);
-            next_vels.push_back(next_state[5]);
-
-            Vector3 next_ctrl = result.at<Vector3>(symbol_t(u_[i], 1));
+            Vector3 next_ctrl = result.at<Vector3>(symbol_t(u_[i], 0));
             Vector1 cur_t = result.at<Vector1>(symbol_t(t_[i], 0));
+
+            exec_result.push_back(
+                {
+                    .drone_vel = {next_state[3], next_state[4], next_state[5]},
+                    .controls = {next_ctrl(0), next_ctrl(1), next_ctrl(2)},
+                    .tension = cur_t(0),
+                }
+            );
+
             if (debug_mode_ == "one_of" || debug_mode_ == "sim") {
                 cout << "  Cur tension " << i + 1 << ": " << cur_t[0] << endl;
                 cout << "Next controls " << i + 1 << ": " << next_ctrl[0] << ' ' << next_ctrl[1] << ' ' << next_ctrl[2] << endl;
             }
         }
-        for (int i = 0; i < robot_num_; i++) {
-            Vector1 cur_t = result.at<Vector1>(symbol_t(t_[i], 0));
-            next_vels.push_back(cur_t[0]);
-        }
-        for (int i = 0; i < robot_num_; i++) {
-            Vector3 next_ctrl = result.at<Vector3>(symbol_t(u_[i], 0));
-            next_vels.push_back(next_ctrl[0]);
-            next_vels.push_back(next_ctrl[1]);
-            next_vels.push_back(next_ctrl[2]);
-        }
-        return next_vels;
+
+        return exec_result;
     }
 };
 

@@ -84,13 +84,24 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('basic_mpc'))
     )
 
+    ############################
+    # FACTOR GRAPH CONTROLLERS #
+    ############################
+
+    robot_num_arg = DeclareLaunchArgument(
+            'robot_num',
+            default_value='1',
+            description='Number of drones.'
+        )
+    robot_num = LaunchConfiguration('robot_num')
+
     mpcg_controller = Node(
         package='crazyflie_ros2_contoller_cpp',
         executable='mpc',
         output='screen',
         parameters=[
             {'desired_height': 0.7},
-            {'robot_prefix': 'crazyflie_01'},
+            {'robot_prefix': 'crazyflie'},
         ],
         condition=IfCondition(LaunchConfiguration('graph_mpc'))
     )
@@ -101,7 +112,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'desired_height': 0.7},
-            {'robot_prefix': 'crazyflie_01'},
+            {'robot_prefix': 'crazyflie'},
         ],
         condition=IfCondition(LaunchConfiguration('graph_mpc_with_ori'))
     )
@@ -112,7 +123,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'desired_height': 0.7},
-            {'robot_prefix': 'crazyflie_01'},
+            {'robot_prefix': 'crazyflie'},
         ],
         condition=IfCondition(LaunchConfiguration('graph_mpc_with_height'))
     )
@@ -123,6 +134,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'robot_prefix': 'crazyflie'}, # indexes will be added in the code
+            {'robot_num': robot_num}
         ],
         condition=IfCondition(LaunchConfiguration('graph_mpc_two_robots'))
     )
@@ -133,16 +145,11 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'robot_prefix': 'crazyflie'}, # indexes will be added in the code
+            {'robot_num': robot_num}
         ],
         condition=IfCondition(LaunchConfiguration('graph_mpc_two_robots_with_ori'))
     )
 
-    robot_num_arg = DeclareLaunchArgument(
-            'robot_num',
-            default_value='4',
-            description='Number of drones.'
-        )
-    robot_num = LaunchConfiguration('robot_num')
     mpcg_multi_drones_with_angle_controller = Node(
         package='crazyflie_ros2_contoller_cpp',
         executable='mpc_multi_drones_with_orientation',

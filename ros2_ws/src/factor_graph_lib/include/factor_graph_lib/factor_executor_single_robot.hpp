@@ -27,6 +27,7 @@ class FactorExecutorSingleRobot: public FactorExecutor {
     Vector2 last_u_;
     Vector1 last_tension_;
     double robot_height_;
+    std::vector<double> desired_robot_heights_;
     string debug_mode_;
 
 public:
@@ -37,6 +38,7 @@ public:
         const Vector4& initial_robot_state, 
         const Vector4& final_load_goal, 
         double robot_height, 
+        const std::vector<double>& desired_robot_heights,
         const Vector2& last_u, 
         const Vector1& last_tension,
         const map<string, double>& tune_d,
@@ -48,10 +50,11 @@ public:
     initial_robot_state_(initial_robot_state), 
     final_load_goal_(final_load_goal), 
     robot_height_(robot_height),
+    desired_robot_heights_(desired_robot_heights),
     last_u_(last_u),
     last_tension_(last_tension) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
     
         NonlinearFactorGraph graph;
 
@@ -77,19 +80,6 @@ public:
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0);
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-//         cable_length_offset 0.7
-// weight_tether_tension 0.04096
-
-// cable_length_offset 0.28672
-// weight_tether_tension 0.32768
-
-// cable_length_offset 0.3
-// weight_tether_tension 0.350315
-
-// cable_length_offset 0.3
-// weight_tether_tension 0.266292
-
-
         double weight_tether_tension = getd("weight_tether_tension",  0.266292); //12.5  0.0008096
         
         double cable_stretch_offset = getd("cable_stretch_offset", 0.001);
@@ -253,93 +243,18 @@ public:
         pos_error = graph.error(result);
 
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
-        Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 1));
-        Vector1 next_tension = result.at<Vector1>(symbol_t('t', 1));
+        Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 0));
+        Vector1 cur_t = result.at<Vector1>(symbol_t('t', 0));
 
-        return {next_state[2], next_state[3], next_ctrl[0], next_ctrl[1], next_tension[0]};
+        FactorExecutorResult exec_result = {
+            {
+                .drone_vel = {next_state[2], next_state[3], desired_robot_heights_[0] - robot_height_},
+                .controls = {next_ctrl(0), next_ctrl(1), 0.0},
+                .tension = cur_t(0),
+            }
+        };
+        return exec_result;
     }
 };
-
-
-        //         cable_length_offset 0.007
-        // cable_stretch_offset 0.001
-        // control_interim_cost 0.256
-        // goal_cost 0.0005
-        // u_lower_bound 0.003
-        // u_upper_bound 40.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 100000
-        // weight_tension_slack 1000
-        // weight_tether_tension 64
-
-        // cable_length_offset 0.000512
-        // cable_stretch_offset 0.001
-        // control_interim_cost 0.002
-        // goal_cost 0.0005
-        // u_lower_bound 0.003
-        // u_upper_bound 40.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 100000
-        // weight_tension_slack 1000
-        // weight_tether_tension 4096
-
-        // cable_length_offset 1e-05
-        // cable_stretch_offset 0.001
-        // control_interim_cost 0.001
-        // goal_cost 0.0005
-        // u_lower_bound 0.003
-        // u_upper_bound 0.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 100000
-        // weight_tension_slack 1000
-        // weight_tether_tension 16
-
-        // cable_length_offset 0.0001
-        // cable_stretch_offset 0.001
-        // control_interim_cost 0.001
-        // goal_cost 0.0005
-        // u_lower_bound 0.003
-        // u_upper_bound 0.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 100000
-        // weight_tension_slack 1000
-        // weight_tether_tension 16
-
-        // cable_length_offset 7e-05
-        // cable_stretch_offset 0.001
-        // control_interim_cost 1
-        // goal_cost 5e-05
-        // u_lower_bound 0.003
-        // u_upper_bound 0.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 100000
-        // weight_tension_slack 1000
-        // weight_tether_tension 1.6
-
-
-        // cable_length_offset 7e-05
-        // cable_stretch_offset 0.0001
-        // control_interim_cost 1
-        // goal_cost 5e-05
-        // u_lower_bound 0.003
-        // u_upper_bound 0.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 1e+06
-        // weight_tension_slack 5000
-        // weight_tether_tension 0.0016
-
-        // cable_length_offset 0.021875
-        // cable_stretch_offset 0.0001
-        // control_interim_cost 1
-        // goal_cost 5e-05
-        // u_lower_bound 0.003
-        // u_upper_bound 10.8
-        // weight_cable_stretch 1000
-        // weight_tension_lower_bound 1e+06
-        // weight_tension_slack 5000
-        // weight_tether_tension 12.5
-
-        //  Position mean: 0.0179714
-        //  Load error mean: 2391.26
 
 #endif // FACTOR_EXECUTOR_SINGLE_ROBOT_HPP

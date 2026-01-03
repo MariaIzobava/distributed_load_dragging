@@ -24,7 +24,7 @@ class FactorExecutorSingleRobotWithOrientation: public FactorExecutor {
     Vector6 initial_load_state_;
     Vector4 initial_robot_state_;
     Vector6 final_load_goal_;
-    double robot_height_;
+    double robot_height_, desired_robot_height_;
     string debug_mode_;
 
 public:
@@ -35,6 +35,7 @@ public:
         const Vector4& initial_robot_state, 
         const Vector6& final_load_goal, 
         double robot_height,
+        double desired_robot_height,
         const map<string, double>& tune_d,
         const map<string, bool>& tune_b
         ):
@@ -43,9 +44,10 @@ public:
     initial_load_state_(initial_load_state), 
     initial_robot_state_(initial_robot_state), 
     final_load_goal_(final_load_goal), 
-    robot_height_(robot_height) {}
+    robot_height_(robot_height),
+    desired_robot_height_(desired_robot_height) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
     
         NonlinearFactorGraph graph;
 
@@ -218,20 +220,24 @@ public:
 
         Values result = runOptimizer(debug_mode_, graph, initial_values, factor_errors, dt, mu, load_mass, gravity, mu2, inertia, 1, true);
 
-        Vector6 last_state = result.at<Vector6>(symbol_t('l', num_time_steps));
-        double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
-        double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
-        pos_error = graph.error(result);
-
         Vector4 next_state = result.at<Vector4>(symbol_t('x', 1));
         Vector2 next_ctrl = result.at<Vector2>(symbol_t('u', 0));
         Vector1 cur_t = result.at<Vector1>(symbol_t('t', 0));
 
         if (debug_mode_ == "one_of" || debug_mode_ == "sim") {
-        cout << " Cur tension: " << cur_t[0] << endl;
-        cout << "Next control: " << next_ctrl[0] << ", " << next_ctrl[1] << endl;
+            cout << " Cur tension: " << cur_t[0] << endl;
+            cout << "Next control: " << next_ctrl[0] << ", " << next_ctrl[1] << endl;
         }
-        return {next_state[2], next_state[3], cur_t[0], next_ctrl[0], next_ctrl[1]};
+        pos_error = graph.error(result);
+
+        FactorExecutorResult exec_result = {
+            {
+                .drone_vel = {next_state[2], next_state[3], desired_robot_height_ - robot_height_},
+                .controls = {next_ctrl(0), next_ctrl(1), 0.0},
+                .tension = cur_t(0),
+            }
+        };
+        return exec_result;
     }
 };
 

@@ -47,129 +47,18 @@ public:
     {
         RCLCPP_INFO(this->get_logger(), "MPC with height with GTSAM node has started.");
 
-        this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
-        init_robot_num(1);
-
-        std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
-
-        position_.resize(6);
-        angles_.resize(3);
-        load_position_.resize(6);
-        load_angles_.resize(3);
         last_control_ << 0.0, 0.0, 0.0;
         last_tension_ << 0;
-
-        is_pulling_ = false;
-        desired_height_ = 0.5;
-
-        odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-          robot_prefix_ + "/odom",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::odom_subscribe_callback, this, std::placeholders::_1));
-
-        load_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-          "load/odom",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::load_odom_subscribe_callback, this, std::placeholders::_1));
-
-        land_ = this->create_subscription<std_msgs::msg::Bool>(
-          "land",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
-
-        twist_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_01", 10);
-        timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
-        std::bind(&GtsamCppTestNode::timer_callback, this));
     }
-
-private:
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
-    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
-    rclcpp::TimerBase::SharedPtr timer_;
-
-    std::vector<double> position_;
-    std::vector<double> angles_;
-    std::vector<double> load_position_;
-    std::vector<double> load_angles_;
-    Eigen::Matrix3d rot_l_, rot_r_;
 
     Vector3 last_control_;
     Vector1 last_tension_;
 
-    bool is_pulling_;
-    double desired_height_;
-    double pos_error_;
-
-    void land_subscribe_callback(const std_msgs::msg::Bool msg)
-    {
-        cout << "Factor Graph MPC: LANDING" << std::endl;
-        timer_->cancel();
-        geometry_msgs::msg::Twist new_cmd_msg;
-        new_cmd_msg.linear.z = -0.2;
-            
-        twist_publisher_->publish(new_cmd_msg);
-        return; 
-    }
-
-    void odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
-    {
-        odom_(msg, position_, angles_, rot_r_);
-    }
-
-    void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
-    {
-        odom_(msg, load_position_, load_angles_, rot_l_);
-    }
-    
-    void timer_callback()
-    {
-        geometry_msgs::msg::Twist new_cmd_msg;
-
-        // If not flying --> takeoff
-        if (!is_pulling_) {
-            new_cmd_msg.linear.z = 0.1;
-            if (position_[2] > desired_height_) {
-                new_cmd_msg.linear.z = 0.0;
-                is_pulling_ = true;
-                start_time_ = std::chrono::high_resolution_clock::now();
-                RCLCPP_INFO(this->get_logger(), "Takeoff completed");
-            }
-            twist_publisher_->publish(new_cmd_msg);
-            return;
-        }
-
-        if (path_ == NULL) {
-            return;
-        }
-
-        // Now the drone is in "pulling" mode, control with MPC
-        auto next_velocity = get_next_velocity_();
-
-        record_metrics(load_position_, {position_}, {next_velocity[6]}, {1}, {{next_velocity[3], next_velocity[4], next_velocity[5]}}, pos_error_);
-
-        last_control_ << next_velocity[3], next_velocity[4], next_velocity[5];
-        last_tension_ << next_velocity[6];
-
-        convert_robot_velocity_to_local_frame(
-            next_velocity[0], next_velocity[1], next_velocity[2], 
-            rot_r_, new_cmd_msg, 0.2
-        );
-        
-        cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << ' ' << new_cmd_msg.linear.z << endl;
-        cout << "Next control: " << last_control_[0] << ' ' << last_control_[1]<< ' ' << last_control_[2] << endl;
-        cout << "Next tension: " << last_tension_[0] << endl;
-        
-        twist_publisher_->publish(new_cmd_msg);
-    }
-
-    std::vector<double> get_next_velocity_() {
+    FactorExecutorResult run_factor_executor() {
 
         Vector6 initial_robot_state(
-            position_[0], position_[1], position_[2],
-            position_[3], position_[4], position_[5]
+            position_[0][0], position_[0][1], position_[0][2],
+            position_[0][3], position_[0][4], position_[0][5]
         );
         Vector4 initial_load_state(
             load_position_[0], load_position_[1],
@@ -182,15 +71,16 @@ private:
             0.0,       0.0  // doesn't matter
         );
 
-        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << std::endl;
-        cout << "Cur robot position: " << initial_robot_state[0] <<  ", " << initial_robot_state[1] << ", " << initial_robot_state[2] <<  ", " << initial_robot_state[3] <<  ", " << initial_robot_state[4] <<  ", " << initial_robot_state[5] <<  std::endl;
-        cout << "Cur robot height: " << position_[2] << std::endl;
-        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1] << std::endl;
+        log_cur_state(position_, load_position_, {}, {next_p[0], next_p[1]});
 
-        auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot_state, final_load_goal, position_[2], last_control_, last_tension_, {}, {});
+        auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot_state, final_load_goal, position_[0][2], last_control_, last_tension_, {}, {});
         map<string, double> factor_errors = {};
-        double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error_);
+        auto res = executor->run(factor_errors, pos_error_);
+
+        last_control_ << res[0].controls[0], res[0].controls[1], res[0].controls[2];
+        last_tension_ << res[0].tension;
+
+        return res;
     }
 };
 

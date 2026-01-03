@@ -54,37 +54,18 @@ public:
         RCLCPP_INFO(this->get_logger(), "MPC with GTSAM node has started.");
 
         this->declare_parameter<std::string>("env", "sim");
-        this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
-        init_robot_num(1);
-
-        std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
         std::string env_ = this->get_parameter("env").as_string();
 
-        position_.resize(6);
-        angles_.resize(3);
-        load_position_.resize(6);
-        load_angles_.resize(3);
         last_control_ << 0.0, 0.0;
         last_tension_ << 0;
 
-        is_pulling_ = false;
-        desired_height_ = 0.5;
-
+        // IMPORTANT: pass this topic name to BaseMpc so that for REAL use case
+        // we use the correct topic name
         std::string twist_publisher_topic = "/cmd_vel";
 
         if (env_ == "sim") {
 
             twist_publisher_topic = "/cmd_vel_01";
-
-            odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            robot_prefix_ + "/odom",
-            10, // QoS history depth
-            std::bind(&GtsamCppTestNode::odom_subscribe_callback, this, std::placeholders::_1));
-
-            load_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            "load/odom",
-            10, // QoS history depth
-            std::bind(&GtsamCppTestNode::load_odom_subscribe_callback, this, std::placeholders::_1));
 
         } else {
             odom_real_subscription_ = this->create_subscription<phasespace_msgs::msg::Rigids>(
@@ -98,52 +79,15 @@ public:
 
             robot_pose_publisher_ = this->create_publisher<motion_capture_tracking_interfaces::msg::NamedPoseArray>("/poses", sensor_data_qos);
         }
-
-        land_ = this->create_subscription<std_msgs::msg::Bool>(
-            "land",
-            10, // QoS history depth
-            std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
-
-        // force_subsc_ = this->create_subscription<geometry_msgs::msg::WrenchStamped>(
-        //     "/ft_sensor_topic",
-        //     10,
-        //     std::bind(&GtsamCppTestNode::force_subscribe_callback, this, std::placeholders::_1)
-        // );
-
-        k_ = 0;
-
-        twist_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(twist_publisher_topic, 10);
-        timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
-        std::bind(&GtsamCppTestNode::timer_callback, this));
     }
 
 private:
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_publisher_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
-    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_;
-    rclcpp::TimerBase::SharedPtr timer_;
 
     rclcpp::Subscription<phasespace_msgs::msg::Rigids>::SharedPtr odom_real_subscription_;
-
-    rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr force_subsc_;
-
     rclcpp::Publisher<motion_capture_tracking_interfaces::msg::NamedPoseArray>::SharedPtr robot_pose_publisher_;
-
-    int k_;
-    std::vector<double> position_;
-    std::vector<double> angles_;
-    std::vector<double> load_position_;
-    std::vector<double> load_angles_;
-    Eigen::Matrix3d rot_l_, rot_r_;
 
     Vector2 last_control_;
     Vector1 last_tension_;
-
-    bool is_pulling_;
-    double desired_height_;
-    double pos_error_;
 
     std::optional<rclcpp::Time> last_robot_time_, last_load_time_;
 
@@ -213,13 +157,13 @@ private:
                 convertPose(m, x, y, z, qx, qy, qz, qw);
 
                 if (m.id == robot_id) {
-                    double prevx = position_[0];
-                    double prevy = position_[1];
-                    double prevz = position_[2];
+                    double prevx = position_[0][0];
+                    double prevy = position_[0][1];
+                    double prevz = position_[0][2];
 
-                    position_[0] = x;
-                    position_[1] = y;
-                    position_[2] = z;
+                    position_[0][0] = x;
+                    position_[0][1] = y;
+                    position_[0][2] = z;
 
                     // Quaternion to Euler conversion
                     tf2::Quaternion q(
@@ -232,14 +176,14 @@ private:
                     double roll, pitch, yaw;
                     m.getRPY(roll, pitch, yaw);
 
-                    angles_[0] = roll;
-                    angles_[1] = pitch;
-                    angles_[2] = yaw;
+                    angles_[0][0] = roll;
+                    angles_[0][1] = pitch;
+                    angles_[0][2] = yaw;
 
                     //cout << "Rotation angles: " << roll << ' ' << pitch << ' '<< yaw << endl;
 
 
-                    rot_r_ = get_rot_from_euler(roll, pitch, yaw);
+                    rot_[0] = get_rot_from_euler(roll, pitch, yaw);
                     // Eigen::Vector3d v_local;
                     // v_local << msg->twist.twist.linear.x, msg->twist.twist.linear.y, msg->twist.twist.linear.z; 
                     // Eigen::Vector3d v_world = rot_r_ * v_local;
@@ -254,9 +198,9 @@ private:
                     rclcpp::Duration dt_duration = current_time - last_robot_time_.value();
                     double dt_seconds = dt_duration.seconds();
 
-                    position_[3] = (position_[0] - prevx) / dt_seconds;
-                    position_[4] = (position_[1] - prevy) / dt_seconds;
-                    position_[5] = (position_[2] - prevz) / dt_seconds;
+                    position_[0][3] = (position_[0][0] - prevx) / dt_seconds;
+                    position_[0][4] = (position_[0][1] - prevy) / dt_seconds;
+                    position_[0][5] = (position_[0][2] - prevz) / dt_seconds;
                     last_robot_time_ = current_time;
 
                     //cout << "Robot pos: " << position_[0] << ' '<< position_[1] << ' '<<position_[2] << ' '<<position_[3] << ' '<<position_[4] << ' '<<position_[5] << endl; 
@@ -284,7 +228,7 @@ private:
                     load_angles_[1] = pitch;
                     load_angles_[2] = yaw;
 
-                    rot_l_ = get_rot_from_euler(roll, pitch, yaw);
+                    rotl_ = get_rot_from_euler(roll, pitch, yaw);
 
                     const auto& current_time = this->now();
                     if (!last_load_time_.has_value()) {
@@ -308,7 +252,7 @@ private:
 
     void force_subscribe_callback(const geometry_msgs::msg::WrenchStamped msg) {
         Vector2 e(2);
-        e << position_[0] - load_position_[0], position_[1] - load_position_[1];
+        e << position_[0][0] - load_position_[0], position_[0][1] - load_position_[1];
         double norm = e.norm();
         e = e / norm;
         Vector3 f(3);
@@ -316,76 +260,14 @@ private:
         
         double t = e(0) * f(0) + e(1) * f(1);
         cout << "Tension value: " << t << endl;
-        cout << "     Distance: " << norm << " height: " << position_[2] << endl;
+        cout << "     Distance: " << norm << " height: " << position_[0][2] << endl;
     }
 
-    void land_subscribe_callback(const std_msgs::msg::Bool msg)
-    {
-        cout << "Factor Graph MPC: LANDING" << std::endl;
-        timer_->cancel();
-        geometry_msgs::msg::Twist new_cmd_msg;
-        //convert_robot_velocity_to_local_frame(0.0, 0.0, -0.25, rot_r_, new_cmd_msg, 0.25);
-            
-        twist_publisher_->publish(new_cmd_msg);
-        return; 
-    }
-
-    void odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
-    {
-        odom_(msg, position_, angles_, rot_r_);
-    }
-
-    void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
-    {
-        odom_(msg, load_position_, load_angles_, rot_l_);
-    }
-    
-    void timer_callback()
-    {
-        geometry_msgs::msg::Twist new_cmd_msg;
-
-        // If not flying --> takeoff
-        if (!is_pulling_) {
-            new_cmd_msg.linear.z = 0.1;
-            //convert_robot_velocity_to_local_frame(0.0, 0.0, 0.1, rot_r_, new_cmd_msg, 0.15);
-            //cout << "commanding velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << ' ' << new_cmd_msg.linear.z << endl;
-            if (position_[2] > desired_height_) {
-                new_cmd_msg.linear.z = 0.0;
-                is_pulling_ = true;
-                start_time_ = std::chrono::high_resolution_clock::now();
-                RCLCPP_INFO(this->get_logger(), "Takeoff completed");
-            }
-            twist_publisher_->publish(new_cmd_msg);
-            return;
-        }
-        if (path_ == NULL) {
-            return;
-        }
-
-        //Now the drone is in "pulling" mode, control with MPC
-        auto next_velocity = get_next_velocity_();
-
-        last_control_ << next_velocity[2], next_velocity[3];
-        last_tension_ << next_velocity[4];
-        record_metrics(load_position_, {position_}, {last_tension_[0]}, {}, {{last_control_[0], last_control_[1], 0.0}}, pos_error_);
-
-        convert_robot_velocity_to_local_frame(
-            next_velocity[0], next_velocity[1], desired_height_ - position_[2], 
-            rot_r_, new_cmd_msg, 0.2
-        );
-        
-        cout << "Next velocity: " << new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
-        cout << "Next control: " << last_control_[0] << ' ' << last_control_[1] << endl;
-        cout << "Next tension: " << last_tension_[0] << endl;
-        
-        twist_publisher_->publish(new_cmd_msg);
-    }
-
-    std::vector<double> get_next_velocity_() {
+    FactorExecutorResult run_factor_executor() {
 
         Vector4 initial_robot_state(
-            position_[0], position_[1],
-            position_[3], position_[4]
+            position_[0][0], position_[0][1],
+            position_[0][3], position_[0][4]
         );
         Vector4 initial_load_state(
             load_position_[0], load_position_[1],
@@ -408,15 +290,21 @@ private:
         //     }
         // );
 
-        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << std::endl;
-        cout << "Cur robot position: " << initial_robot_state[0] <<  ", " << initial_robot_state[1] << ", " << initial_robot_state[2] <<  ", " << initial_robot_state[3] <<  std::endl;
-        cout << "Cur robot height: " << position_[2] << std::endl;
-        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1] << std::endl;
+        log_cur_state(
+            position_, 
+            load_position_, 
+            {}, 
+            {next_p[0], next_p[1]}
+        );
 
-        auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot_state, final_load_goal, position_[2], last_control_, last_tension_, {}, {});
+        auto executor = FactorExecutorFactory::create("sim", initial_load_state, initial_robot_state, final_load_goal, position_[0][2], desired_heights_, last_control_, last_tension_, {}, {});
         map<string, double> factor_errors = {};
-        double pos_error = 0.0;
-        return executor->run(factor_errors, pos_error_);
+        auto res = executor->run(factor_errors, pos_error_);
+
+        last_control_ << res[0].controls[0], res[0].controls[1];
+        last_tension_ << res[0].tension;
+
+        return res;
     }
 };
 

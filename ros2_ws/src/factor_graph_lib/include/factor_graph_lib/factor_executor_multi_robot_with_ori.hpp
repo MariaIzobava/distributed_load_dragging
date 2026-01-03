@@ -25,7 +25,7 @@ class FactorExecutorMultiRobotsWithOrientation: public FactorExecutor {
     Vector6 initial_load_state_;
     std::vector<Vector4> initial_robot_states_;
     Vector6 final_load_goal_;
-    std::vector<double> robot_heights_;
+    std::vector<double> robot_heights_, desired_robot_heights_;
     string debug_mode_;
     int robot_num_;
 
@@ -38,6 +38,7 @@ public:
         const std::vector<Vector4>& initial_robot_states, 
         const Vector6& final_load_goal, 
         const std::vector<double>& robot_heights,
+        const std::vector<double>& desired_robot_heights,
         const map<string, double>& tune_d,
         const map<string, bool>& tune_b
         ):
@@ -47,9 +48,10 @@ public:
     initial_load_state_(initial_load_state), 
     initial_robot_states_(initial_robot_states), 
     final_load_goal_(final_load_goal), 
-    robot_heights_(robot_heights) {}
+    robot_heights_(robot_heights),
+    desired_robot_heights_(desired_robot_heights) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
 
         NonlinearFactorGraph graph;
 
@@ -57,8 +59,8 @@ public:
         const int num_time_steps = 20;
         const double dt = 0.005;
         const double robot_mass = 0.025; // kg
-        const double load_mass = 0.03;   // kg
-        const double inertia = 0.000798;
+        const double load_mass = 0.015;   // kg
+        const double inertia = 0.000399;
         const double gravity = 9.81;
         const double mu = 0.3;
         const double mu2 = 0.3;
@@ -71,16 +73,18 @@ public:
         // VALUES TO TUNE
         // =============================
         // =============================
-        double u_upper_bound = getd("u_upper_bound", 0.5); //5 for 3 and 4 robots!!! 
+        double u_upper_bound = getd("u_upper_bound", 0.5); 
+        // For detacheable scenario:
+        // double u_upper_bound = getd("u_upper_bound", 0.45); 
         // if (robot_num_ == 3) {
-        //     u_upper_bound = 0.55; //0.45 for 4 detachale 
+        //     u_upper_bound = 0.55;
         // }
         const double u_lower_bound = getd("u_lower_bound", 0.003);
 
         double weight_tension_lower_bound = getd("weight_tension_lower_bound", 1000000.0);
         double weight_cable_stretch = getd("weight_cable_stretch", 100.0) ;
         double weight_tension_slack = getd("weight_tension_slack", 50.0);
-        double weight_tether_tension = getd("weight_tether_tension", 0.266292); //0.296292  0.266292
+        double weight_tether_tension = getd("weight_tether_tension", 0.296292); //0.296292 for 4 segments!
 
         double cable_stretch_penalty_offset = getd("cable_stretch_penalty_offset", 0.0);
         double tension_slack_penalty_offset = getd("tension_slack_penalty_offset", 0.2); 
@@ -355,32 +359,28 @@ public:
         double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
         pos_error = graph.error(result);
 
-        std::vector<double> next_vels;
+        FactorExecutorResult exec_result = {};
         for (int i = 0; i < robot_num_; i++) {
 
             Vector4 next_state = result.at<Vector4>(symbol_t(x_[i], 1));
-            next_vels.push_back(next_state[2]);
-            next_vels.push_back(next_state[3]);
-
-            Vector2 next_ctrl = result.at<Vector2>(symbol_t(u_[i], 1));
+            Vector2 next_ctrl = result.at<Vector2>(symbol_t(u_[i], 0));
             Vector1 cur_t = result.at<Vector1>(symbol_t(t_[i], 0));
+
+            exec_result.push_back(
+                {
+                    .drone_vel = {next_state[2], next_state[3], desired_robot_heights_[i] - robot_heights_[i]},
+                    .controls = {next_ctrl(0), next_ctrl(1), 0.0},
+                    .tension = cur_t(0),
+                }
+            );
+
             if (debug_mode_ == "one_of" || debug_mode_ == "sim") {
                 cout << "  Cur tension " << i + 1 << ": " << cur_t[0] << endl;
                 cout << "Next controls " << i + 1 << ": " << next_ctrl[0] << ' ' << next_ctrl[1] << endl;
             }
         }
-        for (int i = 0; i < robot_num_; i++) {
-            Vector1 cur_t = result.at<Vector1>(symbol_t(t_[i], 0));
-            next_vels.push_back(cur_t[0]);
-        }
 
-        for (int i = 0; i < robot_num_; i++) {
-            Vector2 next_ctrl = result.at<Vector2>(symbol_t(u_[i], 0));
-            next_vels.push_back(next_ctrl[0]);
-            next_vels.push_back(next_ctrl[1]);
-        }
-
-        return next_vels;
+        return exec_result;
     }
 };
 

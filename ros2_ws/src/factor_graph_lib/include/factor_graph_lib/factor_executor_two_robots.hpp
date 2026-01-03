@@ -26,6 +26,7 @@ class FactorExecutorTwoRobots: public FactorExecutor {
     Vector4 initial_robot2_state_;
     Vector4 final_load_goal_;
     double robot_height1_, robot_height2_;
+    std::vector<double> desired_robot_heights_;
     Vector2 last_u1_;
     Vector2 last_u2_;
     string debug_mode_;
@@ -40,6 +41,7 @@ public:
         const Vector4& final_load_goal, 
         double robot_height1, 
         double robot_height2,
+        const std::vector<double>& desired_robot_heights,
         const Vector2& last_u1,
         const Vector2& last_u2,
         const map<string, double>& tune_d,
@@ -53,10 +55,11 @@ public:
     final_load_goal_(final_load_goal), 
     robot_height1_(robot_height1),
     robot_height2_(robot_height2),
+    desired_robot_heights_(desired_robot_heights),
     last_u1_(last_u1),
     last_u2_(last_u2) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
 
         NonlinearFactorGraph graph;
 
@@ -236,40 +239,31 @@ public:
 
         Vector4 next_state1 = result.at<Vector4>(symbol_t('x', 1));
         Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));
-        Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 1));
-        Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 1));
-        Vector1 cur_tension1 = result.at<Vector1>(symbol_t('t', 0));
-        Vector1 cur_tension2 = result.at<Vector1>(symbol_t('T', 0));
+        Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 0));
+        Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 0));
+        Vector1 cur_t1 = result.at<Vector1>(symbol_t('t', 0));
+        Vector1 cur_t2 = result.at<Vector1>(symbol_t('T', 0));
+
+        FactorExecutorResult exec_result = {
+            {
+                .drone_vel = {next_state1[2], next_state1[3], desired_robot_heights_[0] - robot_height1_},
+                .controls = {next_ctrl1(0), next_ctrl1(1), 0.0},
+                .tension = cur_t1(0),
+            },
+            {
+                .drone_vel = {next_state2[2], next_state2[3], desired_robot_heights_[1] - robot_height2_},
+                .controls = {next_ctrl2(0), next_ctrl2(1), 0.0},
+                .tension = cur_t2(0),
+            },
+        };
 
         if (debug_mode_ == "one_of" || debug_mode_ == "sim") {
-        cout << "  Cur tension: " << cur_tension1[0] << ' ' << cur_tension2[0] << endl;
-        cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
+            cout << "  Cur tension: " << cur_t1[0] << ' ' << cur_t2[0] << endl;
+            cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
         }
-        return {next_state1[2], next_state1[3], next_state2[2], next_state2[3], next_ctrl1[0], next_ctrl1[1], next_ctrl2[0], next_ctrl2[1], cur_tension1[0], cur_tension2[0]};
+
+        return exec_result;
     }
 };
-
-        //         goal_cost 0.0005
-        // tether_tension_offset 0.03584
-        // weight_tether_tension 16.384
-
-        // goal_cost 5e-05
-        // tether_tension_offset 0.07
-        // weight_tether_tension 16.384
-
-        //  Position mean: 0.00292685
-        //  Load error mean: 1945.47
-
-        // =======================
-        // goal_cost 5e-05
-        // tether_tension_offset 0.07
-        // weight_tether_tension 21
-
-        //  Position mean: 0.00292666
-        //  Load error mean: 1752.31
-
-        // tether_tension_offset 0.03584
-        // weight_tether_tension 3.2768
-        // have_trajectory_reference_factor 1
 
 #endif // FACTOR_EXECUTOR_TWO_ROBOTS_HPP

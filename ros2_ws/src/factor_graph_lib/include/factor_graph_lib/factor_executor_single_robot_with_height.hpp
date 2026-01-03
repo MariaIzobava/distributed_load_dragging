@@ -54,7 +54,7 @@ public:
     last_u_(last_u),
     last_tension_(last_tension) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
     
         NonlinearFactorGraph graph;
 
@@ -270,16 +270,20 @@ public:
             printOptimizedTrajectoryWithHeight(result, dt, mu, load_mass, gravity, false);
         }
 
-        Vector6 next_state = result.at<Vector6>(symbol_t('x', 1));
-        Vector3 next_ctrl = result.at<Vector3>(symbol_t('u', 1));
-        Vector1 next_tension = result.at<Vector1>(symbol_t('t', 1));
-        
-        Vector4 last_state = result.at<Vector4>(symbol_t('l', num_time_steps));
-        double a1 = sqrt((final_load_goal_[0] - last_state[0]) * (final_load_goal_[0] - last_state[0]) + (final_load_goal_[1] - last_state[1]) * (final_load_goal_[1] - last_state[1]));
-        double a2 = sqrt((final_load_goal_[0] - initial_load_state_[0]) * (final_load_goal_[0] - initial_load_state_[0]) + (final_load_goal_[1] - initial_load_state_[1]) * (final_load_goal_[1] - initial_load_state_[1]));
         pos_error = graph.error(result);
 
-        return {next_state[3], next_state[4], next_state[5], next_ctrl[0], next_ctrl[1], next_ctrl[2], next_tension[0]};
+        Vector6 next_state = result.at<Vector6>(symbol_t('x', 1));
+        Vector3 next_ctrl = result.at<Vector3>(symbol_t('u', 0));
+        Vector1 cur_t = result.at<Vector1>(symbol_t('t', 0));
+
+        FactorExecutorResult exec_result = {
+            {
+                .drone_vel = {next_state[3], next_state[4], next_state[5]},
+                .controls = {next_ctrl(0), next_ctrl(1), next_ctrl(2)},
+                .tension = cur_t(0),
+            }
+        };
+        return exec_result;
     }
 };
 

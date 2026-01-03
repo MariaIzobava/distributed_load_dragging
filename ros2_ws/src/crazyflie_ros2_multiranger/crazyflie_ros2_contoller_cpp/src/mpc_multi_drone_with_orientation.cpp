@@ -46,86 +46,14 @@ public:
     {
         RCLCPP_INFO(this->get_logger(), "MPC for multiple robots with orientation with GTSAM node has started.");
 
-        this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
-        this->declare_parameter<int>("robot_num", 4);
-
-        std::string robot_prefix_ = this->get_parameter("robot_prefix").as_string();
-        robot_num_ = this->get_parameter("robot_num").as_int();
-        init_robot_num(robot_num_);
-
-        cout << "Registered number of robots: " << robot_num_ << endl;
-
-        position_.resize(robot_num_);
-        angles_.resize(robot_num_);
-        rot_.resize(robot_num_);
-
-        for (int i = 0; i < robot_num_; i++) {
-            position_[i].resize(6);
-            angles_[i].resize(6);
-        }
-        load_position_.resize(6);
-        load_angles_.resize(6);
-
-        is_pulling_ = 0;
-        for (int i = 0; i < robot_num_; i++) {
-            double sgn = (i % 2 == 0) ? 1: -1;
-            desired_heights_.push_back(0.5 + sgn * 0.1 * i);
-            //desired_heights_.push_back(0.2 + 0.15 * i);
-        }
-
-        for (int i = 0; i < robot_num_; i++) {
-            string suffix = "_0" + to_string(i+1) + "/odom";
-            odom_subscription_.push_back(this->create_subscription<nav_msgs::msg::Odometry>(
-            robot_prefix_ + suffix,
-            10, // QoS history depth
-            [this, i](const nav_msgs::msg::Odometry::SharedPtr msg) {
-                // Inside the lambda, call the member function with both arguments
-                this->robot_odom_subscribe_callback(msg, i);
-            }));
-        }
-
-        load_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
-          "load/odom",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::load_odom_subscribe_callback, this, std::placeholders::_1));
-
-        land_ = this->create_subscription<std_msgs::msg::Bool>(
-          "land",
-          10, // QoS history depth
-          std::bind(&GtsamCppTestNode::land_subscribe_callback, this, std::placeholders::_1));
-
         last_robot_rm_ = this->create_subscription<std_msgs::msg::Bool>(
           "last_robot_rm",
           10, // QoS history depth
           std::bind(&GtsamCppTestNode::last_robot_rm_callback, this, std::placeholders::_1));
-
-        for (int i = 0; i < robot_num_; i++) {
-            string topic_name = "/cmd_vel_0" + to_string(i+1);
-            twist_publisher_.push_back(this->create_publisher<geometry_msgs::msg::Twist>(topic_name, 10));
-        }
-        timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(100), // 0.1 seconds = 100 milliseconds
-        std::bind(&GtsamCppTestNode::timer_callback, this));
     }
 
 private:
-    std::vector<rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr> twist_publisher_;
-    std::vector<rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr> odom_subscription_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr load_odom_subscription_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr land_, last_robot_rm_;
-    rclcpp::TimerBase::SharedPtr timer_;
-
-    std::vector<std::vector<double> > position_;
-    std::vector<std::vector<double> > angles_;
-    std::vector<double> load_position_;
-    std::vector<double> load_angles_;
-    std::vector<Eigen::Matrix3d> rot_;
-    Eigen::Matrix3d rotl_;
-
-    int is_pulling_, robot_num_;
-    std::vector<double> desired_heights_;
-    double pos_error_;
-
     int last_drone_removed_ = 0;
 
     void last_robot_rm_callback(const std_msgs::msg::Bool msg) {
@@ -138,98 +66,7 @@ private:
         last_drone_removed_ = 1;
     }
 
-    void land_subscribe_callback(const std_msgs::msg::Bool msg)
-    {
-        cout << "Factor Graph MPC: LANDING" << std::endl;
-        timer_->cancel();
-        geometry_msgs::msg::Twist new_cmd_msg;
-        new_cmd_msg.linear.z = -0.2;
-            
-        for (int i = 0; i < robot_num_; i++) {
-            twist_publisher_[i]->publish(new_cmd_msg);
-        }
-        return; 
-    }
-
-    void robot_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg, int k)
-    {
-        odom_(msg, position_[k], angles_[k], rot_[k]);
-    }
-
-    void load_odom_subscribe_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
-    {
-        odom_(msg, load_position_, load_angles_, rotl_);
-    }
-    
-    void timer_callback()
-    {
-
-        // If not flying --> takeoff
-        if (is_pulling_ != (1 << robot_num_) - 1) {
-            for (int i = 0; i < robot_num_; i++) {
-                geometry_msgs::msg::Twist new_cmd_msg;
-                new_cmd_msg.linear.z = 0.1;
-
-                if (position_[i][2] > desired_heights_[i]) {
-                    new_cmd_msg.linear.z = 0.0;
-                    is_pulling_ |= (1 << i);
-                }
-
-                twist_publisher_[i]->publish(new_cmd_msg);
-            }
-            if (is_pulling_ == (1 << robot_num_) - 1) {
-                start_time_ = std::chrono::high_resolution_clock::now();
-                RCLCPP_INFO(this->get_logger(), "Takeoff completed");
-            }
-            return;
-        }
-
-        if (path_ == NULL) {
-            return;
-        }
-
-        // Now the drone is in "pulling" mode, control with MPC
-        auto next_velocity = get_next_velocity_();
-
-        std::vector<double> tensions;
-        std::vector<int> ap_directions;
-        std::vector<std::vector<double> > controls;
-        int cur_robot_num = robot_num_ - last_drone_removed_;
-        controls.resize(robot_num_);
-        for (int i = 0; i < robot_num_; i++) {
-            ap_directions.push_back(1);
-
-            if (last_drone_removed_ && i == robot_num_ - 1) {
-                tensions.push_back(0);
-                controls[i].push_back(0);
-                controls[i].push_back(0);
-            } else {
-                tensions.push_back(next_velocity[cur_robot_num * 2 + i]);
-                controls[i].push_back(next_velocity[cur_robot_num * 3 + 2 * i]);
-                controls[i].push_back(next_velocity[cur_robot_num * 3 + 2 * i + 1]);
-            }
-
-            controls[i].push_back(0.0);
-        }
-        std::vector<double> load_pos = {load_position_[0], load_position_[1], load_angles_[2], 
-            load_position_[3], load_position_[4], load_angles_[3]};
-        record_metrics(load_pos, position_, tensions, ap_directions, controls, pos_error_);
-
-        for (int i = 0; i < cur_robot_num; i++) {
-            geometry_msgs::msg::Twist new_cmd_msg;
-
-            convert_robot_velocity_to_local_frame(
-                next_velocity[2 * i], next_velocity[2 * i + 1], desired_heights_[i] - position_[i][2], 
-                rot_[i], new_cmd_msg, 0.2
-            );
-
-            cout << "Next velocity (world) drone " << i+1 << ": " << next_velocity[2*i] << ' ' << next_velocity[2*i+1] << endl;
-            cout << "Next velocity (local) drone " << i+1 << ": " <<  new_cmd_msg.linear.x << ' ' << new_cmd_msg.linear.y << endl;
-            twist_publisher_[i]->publish(new_cmd_msg);
-        }
-    }
-
-    std::vector<double> get_next_velocity_() {
+    FactorExecutorResult run_factor_executor() {
         std::vector<Vector4> initial_robot_states_;
         std::vector<double> heights;
         for (int i = 0; i < robot_num_ - last_drone_removed_; i++) {
@@ -262,17 +99,10 @@ private:
         //     }
         // );
 
-        cout << "\n===================" << std::endl;
-        cout << "Cur load position: " << initial_load_state[0] <<  ", " << initial_load_state[1] << ", " << initial_load_state[2] <<  ", " << initial_load_state[3] << ", " << initial_load_state[4] <<  ", " << initial_load_state[5] << std::endl;
-        for (int i = 0; i < robot_num_ - last_drone_removed_; i++) {
-            cout << "Cur robot " << i + 1 << " position: " << initial_robot_states_[i][0] <<  ", " << initial_robot_states_[i][1] << ", " << initial_robot_states_[i][2] <<  ", " << initial_robot_states_[i][3] <<  std::endl;
-            cout << "Height: " << heights[i] << endl;    
-        }
-        cout << "Next load position: " << final_load_goal[0] <<  ", " << final_load_goal[1]<<  ", " << final_load_goal[2] << std::endl;
+        log_cur_state(position_, load_position_, {load_angles_[2], load_angles_[3]}, {next_p[0], next_p[1], next_p[2]});
 
-        auto executor = FactorExecutorFactory::create("sim", robot_num_ - last_drone_removed_, initial_load_state, initial_robot_states_, final_load_goal, heights, {}, {});
+        auto executor = FactorExecutorFactory::create("sim", robot_num_ - last_drone_removed_, initial_load_state, initial_robot_states_, final_load_goal, heights, desired_heights_, {}, {});
         map<string, double> factor_errors = {};
-        double pos_error = 0.0;
         return executor->run(factor_errors, pos_error_);
     }
 };

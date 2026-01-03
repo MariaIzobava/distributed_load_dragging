@@ -469,7 +469,7 @@ protected:
     static inline const char u_[] = "uUyY";
 
 public:
-    virtual std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const = 0;
+    virtual FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const = 0;
 
     FactorExecutor() : tune_d_({}), tune_b_({}) {}
 

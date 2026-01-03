@@ -28,6 +28,7 @@ class FactorExecutorTwoRobotsWithOrientation: public FactorExecutor {
     Vector4 initial_robot2_state_;
     Vector6 final_load_goal_;
     double robot_height1_, robot_height2_;
+    std::vector<double> desired_robot_heights_;
     string debug_mode_;
 
 public:
@@ -40,6 +41,7 @@ public:
         const Vector6& final_load_goal, 
         double robot_height1, 
         double robot_height2,
+        const std::vector<double>& desired_robot_heights,
         const map<string, double>& tune_d,
         const map<string, bool>& tune_b
         ):
@@ -50,9 +52,10 @@ public:
     initial_robot2_state_(initial_robot2_state), 
     final_load_goal_(final_load_goal), 
     robot_height1_(robot_height1),
-    robot_height2_(robot_height2) {}
+    robot_height2_(robot_height2),
+    desired_robot_heights_(desired_robot_heights) {}
 
-    std::vector<double> run(map<string, double>& factor_errors, double& pos_error) const override {
+    FactorExecutorResult run(map<string, double>& factor_errors, double& pos_error) const override {
 
         NonlinearFactorGraph graph;
 
@@ -252,153 +255,29 @@ public:
         Vector4 next_state2 = result.at<Vector4>(symbol_t('X', 1));
         Vector2 next_ctrl1 = result.at<Vector2>(symbol_t('u', 0));
         Vector2 next_ctrl2 = result.at<Vector2>(symbol_t('U', 0));
-        Vector1 tension1 = result.at<Vector1>(symbol_t('t', 0));
-        Vector1 tension2 = result.at<Vector1>(symbol_t('T', 0));
+        Vector1 cur_t1 = result.at<Vector1>(symbol_t('t', 0));
+        Vector1 cur_t2 = result.at<Vector1>(symbol_t('T', 0));
+
+        FactorExecutorResult exec_result = {
+            {
+                .drone_vel = {next_state1[2], next_state1[3], desired_robot_heights_[0] - robot_height1_},
+                .controls = {next_ctrl1(0), next_ctrl1(1), 0.0},
+                .tension = cur_t1(0),
+            },
+            {
+                .drone_vel = {next_state2[2], next_state2[3], desired_robot_heights_[1] - robot_height2_},
+                .controls = {next_ctrl2(0), next_ctrl2(1), 0.0},
+                .tension = cur_t2(0),
+            },
+        };
 
         if (debug_mode_ == "one_of" || debug_mode_ == "sim") {
-        cout << "  Cur tension: " << tension1[0] << ' ' << tension2[0] << endl;
-        cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
+            cout << "  Cur tension: " << cur_t1[0] << ' ' << cur_t2[0] << endl;
+            cout << "Next controls: " << next_ctrl1[0] << ' ' << next_ctrl1[1] << ' ' << next_ctrl2[0] << ' ' << next_ctrl2[1] << endl;
         }
-        return {next_state1[2], next_state1[3], next_state2[2], next_state2[3], tension1[0], tension2[0], next_ctrl1[0], next_ctrl1[1], next_ctrl2[0], next_ctrl2[1] };
+
+        return exec_result;
     }
 };
-
-//         tether_tension_offset 0.28672
-        // weight_tether_tension 0.4096
-
-// tether_tension_offset 0.0001575
-// weight_tether_tension 0.65536
-// have_trajectory_reference_factor 1
-// have_uk_prior 0
-
-//  Position mean: 0.00142579
-//  Load error mean: 13658.2
-
-
-//  tether_tension_offset 0.0001575
-// weight_tether_tension 20.9715
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 4.25172e-06
-//  Load error mean: 153151
-
-
-//  tether_tension_offset 7e-05
-// weight_tether_tension 10.4858
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 3.5451e-06
-//  Load error mean: 136141
-
-// =======================
-// tether_tension_offset 0.000105
-// weight_tether_tension 10.4858
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 3.55206e-06
-//  Load error mean: 131986
-
-
-//  tether_tension_offset 0.000105
-// weight_tether_tension 2.62144
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 2.59747e-06
-//  Load error mean: 18575.3
-
-// =======================
-// tether_tension_offset 0.0001575
-// weight_tether_tension 2.62144
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 2.61502e-06
-//  Load error mean: 18699.5
-
-// =======================
-// tether_tension_offset 7e-05
-// weight_tether_tension 2.62144
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 2.62003e-06
-//  Load error mean: 18742.4
-
-// =======================
-// tether_tension_offset 0.00023625
-// weight_tether_tension 2.62144
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 2.64288e-06
-//  Load error mean: 18795.3
-
-
-//  tether_tension_offset 0.0001575
-// weight_tether_tension 0.00512
-// have_trajectory_reference_factor 0
-// have_uk_prior 1
-
-//  Position mean: 1.24812e-06
-//  Load error mean: 11145.6
-
-// =======================
-// tether_tension_offset 7e-05
-// weight_tether_tension 0.32768
-// have_trajectory_reference_factor 1
-// have_uk_prior 1
-
-//  Position mean: 1.2484e-06
-//  Load error mean: 16669.6
-
-// =======================
-// tether_tension_offset 7e-05
-// weight_tether_tension 0.04096
-// have_trajectory_reference_factor 0
-// have_uk_prior 0
-
-//  Position mean: 1.24841e-06
-//  Load error mean: 14197
-
-// =======================
-// tether_tension_offset 0.00023625
-// weight_tether_tension 0.00016
-// have_trajectory_reference_factor 0
-// have_uk_prior 1
-
-//  Position mean: 1.24879e-06
-//  Load error mean: 10060.6
-
-// =======================
-// tether_tension_offset 0.000354375
-// weight_tether_tension 0.00512
-// have_trajectory_reference_factor 0
-// have_uk_prior 1
-
-//  Position mean: 1.24898e-06
-//  Load error mean: 11093.6
-
-// =======================
-// tether_tension_offset 0.0001575
-// weight_tether_tension 0.00016
-// have_trajectory_reference_factor 0
-// have_uk_prior 1
-
-//  Position mean: 1.249e-06
-//  Load error mean: 10103.6
-
-//  ========================== 
-// tether_tension_offset 0.000354375  7e1-5     0.000797344   0.000531562
-// weight_tether_tension 0.00032      0.00064   0.00128       0.00128
-// have_trajectory_reference_factor 1 1         1             1
-// have_uk_prior 1                    1         1             1
-
-//  Position mean: 1.249e-06
-//  Load error mean: 10103.6
-
 
 #endif // FACTOR_EXECUTOR_TWO_ROBOTS_WITH_ORI_HPP

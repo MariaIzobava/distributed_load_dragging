@@ -37,13 +37,7 @@ using json = nlohmann::json;
 class GtsamCppTestNode : public BaseMpc
 {
 public:
-    GtsamCppTestNode() : 
-    BaseMpc(
-        "/home/maryia/legacy/experiments/metrics/",  
-        false, 
-        true, 
-        "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/one_drone_with_height_points.json",
-        "gtsam_cpp_test_node")
+    GtsamCppTestNode() : BaseMpc(false, true, "gtsam_cpp_test_node")
     {
         RCLCPP_INFO(this->get_logger(), "MPC with height with GTSAM node has started.");
 

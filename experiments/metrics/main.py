@@ -14,7 +14,7 @@ def load_position_error_graph(df):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.savefig('position_error.pdf')
+    plt.savefig('output/position_error.pdf')
 
 
 def trajectories_graph2d(df, num_robots):
@@ -28,7 +28,7 @@ def trajectories_graph2d(df, num_robots):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.savefig('traj_up.pdf')
+    plt.savefig('output/traj_up.pdf')
 
 
     plt.figure(figsize=(10, 10))
@@ -42,7 +42,7 @@ def trajectories_graph2d(df, num_robots):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.savefig('traj_side.pdf')
+    plt.savefig('output/traj_side.pdf')
 
 
 def trajectories_graph(df, num_robots):
@@ -63,7 +63,7 @@ def trajectories_graph(df, num_robots):
     ax.set_title('3D Trajectories of Load and Drone(s)')
     ax.legend()
     plt.tight_layout()
-    plt.savefig('trajectories_3d.pdf')
+    plt.savefig('output/trajectories_3d.pdf')
 
 
 def drone_control_graph(df, num_robots, robot_height):
@@ -98,7 +98,7 @@ def drone_control_graph(df, num_robots, robot_height):
             plt.legend()
 
     plt.tight_layout()
-    plt.savefig('drone_controls.pdf')
+    plt.savefig('output/drone_controls.pdf')
 
 
 def cable_tensions_graph(df, num_robots, load_ori, robot_height):
@@ -114,7 +114,6 @@ def cable_tensions_graph(df, num_robots, load_ori, robot_height):
         plt.plot(df['timestamp'].to_numpy(), df[f'dist_{i}'].to_numpy(), label=f'Drone {i} <--> Load distance')
         plt.xlabel('Time (s)')
         plt.ylabel('Distance (M)')
-        #plt.title(f'Distance between Load and Drone {i}')
         plt.grid(True)
         plt.legend()
 
@@ -122,12 +121,11 @@ def cable_tensions_graph(df, num_robots, load_ori, robot_height):
         plt.plot(df['timestamp'].to_numpy(), df[f'cable{i}_tension'].to_numpy(), label=f'Cable {i} Tension')
         plt.xlabel('Time (s)')
         plt.ylabel('Tension (N)')
-        #plt.title(f'Cable {i} Tension Over Time')
         plt.grid(True)
         plt.legend()
     
     plt.tight_layout()
-    plt.savefig('cable_tensions.pdf')
+    plt.savefig('output/cable_tensions.pdf')
 
 def get_filename(num_robots, load_ori, robot_height = False):
     num_drones = ["one_drone", "two_drones", "three_drones", "four_drones"]
@@ -136,38 +134,6 @@ def get_filename(num_robots, load_ori, robot_height = False):
     filename += "_with_ori" if load_ori else ""
 
     return filename
-    
-    # if (num_robots == 1 and not load_ori and not robot_height):
-    #     return "one_drone_no_ori"
-    
-    # if (num_robots == 1 and load_ori and not robot_height):
-    #     return "one_drone_with_ori"
-
-    # if (num_robots == 2 and not load_ori and not robot_height):
-    #     return "two_drones_no_ori"
-
-    # if (num_robots == 2 and load_ori and not robot_height):
-    #     return "three_drones_with_ori"
-
-    # if (num_robots == 4 and load_ori and not robot_height):
-    #     return "four_drones_with_ori"
-
-    # if (num_robots == 3 and load_ori and not robot_height):
-    #     return "three_drones_with_ori"
-
-    # if (num_robots == 3 and load_ori and robot_height):
-    #     return "three_drones_with_height_and_ori"
-
-    # if (num_robots == 4 and load_ori and robot_height):
-    #     return "four_drones_with_height_and_ori"
-
-    # if (num_robots == 1 and load_ori and robot_height):
-    #     return "one_drone_with_height_and_ori"
-
-    # if (num_robots == 2 and load_ori and robot_height):
-    #     return "two_drones_with_height_and_ori"
-
-    # raise ValueError("Unknown combination of parameters")
     
 
 parser = argparse.ArgumentParser(description="A simple program that reads a value from the command line.")
@@ -179,7 +145,7 @@ args = parser.parse_args()
 print(f"Calculating metrics for the following config:\n Number of robots: {args.num_robots}\n Load orientation: {args.load_ori}\n Robot height: {args.robot_height}\n")
 
 filename = get_filename(args.num_robots, args.load_ori, args.robot_height)
-df = pd.read_csv( f'/home/maryia/legacy/experiments/metrics/{filename}.csv')
+df = pd.read_csv( f'/home/maryia/legacy/experiments/metrics/output/{filename}.csv')
 
 load_position_error_graph(df)
 trajectories_graph(df, args.num_robots)

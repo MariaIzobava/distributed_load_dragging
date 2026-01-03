@@ -50,13 +50,14 @@ protected:
   double pos_error_;
 
   explicit BaseMpc(
-    const std::string& metrics_file,
     bool load_ori, 
-    bool robot_height, 
-    const std::string& datapoints_file,
+    bool robot_height,
     const std::string& node_name)
-  : rclcpp::Node(node_name), metrics_file_(metrics_file), load_ori_(load_ori), robot_height_(robot_height), datapoints_file_(datapoints_file) {
+  : rclcpp::Node(node_name), load_ori_(load_ori), robot_height_(robot_height) {
 
+    metrics_file_ = "/home/maryia/legacy/experiments/metrics/output/";
+    datapoints_file_ = "/home/maryia/legacy/experiments/factor_graph_one_drone_one_step/";
+    
     this->declare_parameter<std::string>("robot_prefix", "/crazyflie");
     this->declare_parameter<int>("robot_num", 1);
 
@@ -117,7 +118,7 @@ protected:
         twist_publisher_.push_back(this->create_publisher<geometry_msgs::msg::Twist>(topic_name, 10));
     }
 
-    initialize_metrics_file();
+    initialize_metrics_files();
   }
 
   virtual FactorExecutorResult run_factor_executor() = 0;
@@ -390,16 +391,18 @@ private:
     msg.linear.z = max(min(v_world(2), limit), -limit); 
   }
 
-  void initialize_metrics_file() {
+  void initialize_metrics_files() {
 
     std::vector<string> num_drones = {"one_drone", "two_drones", "three_drones", "four_drones"};
     std::string filename = num_drones[robot_num_ - 1];
     filename += robot_height_ ? "_with_height" : "";
     filename += load_ori_ ? "_with_ori" : "";
-    filename += ".csv";
 
-    metrics_file_ += filename;
+    metrics_file_ += filename + ".csv";
+    datapoints_file_ += filename + "_points.json";
+
     cout << "Metrics will be stored in: " << metrics_file_ << endl;
+    cout << "Datapoints will be stored in: " << datapoints_file_ << endl;
     
     // Clean up and initialize metrics file with correct headers
     std::ofstream ofs;
